@@ -27,6 +27,8 @@
 | `ROUNDTABLE_NO_BROWSER` | 设成 1 启动时不自动开浏览器 | 不设 |
 | `ROUNDTABLE_CODEX` | 设成 `exec` 退回旧的每轮一个 `codex exec` | `appserver` |
 
+没做完的事见 [TODO.md](TODO.md)。
+
 测试：`python tests\test_rt.py` 等（每个文件单独跑；用临时目录和假的 AI，不碰真的会话和记录）。
 
 ## 详细说明
