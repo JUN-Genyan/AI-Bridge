@@ -191,3 +191,7 @@
   - 看有哪些：`git for-each-ref refs/roundtable`
   - 删一场会议的：`git for-each-ref --format="%(refname)" refs/roundtable/<会议目录名>/ | ForEach-Object { git update-ref -d $_ }`
   - 全删：`git for-each-ref --format="%(refname)" refs/roundtable | ForEach-Object { git update-ref -d $_ }`，再 `git gc --prune=now` 才真正回收空间。删了 ref 之后那几步就撤不回了。
+
+## 许可证
+
+MIT，见 [LICENSE](LICENSE)。
