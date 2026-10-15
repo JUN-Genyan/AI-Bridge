@@ -39,7 +39,7 @@ def reset():
         rt.messages.clear()
         rt.pending.clear()
         rt.state["running"].clear()
-        rt.state["compact_q"] = 0
+        rt.state["compacting"].clear()
     shutil.rmtree(os.environ["ROUNDTABLE_LOG_DIR"], ignore_errors=True)
 
 

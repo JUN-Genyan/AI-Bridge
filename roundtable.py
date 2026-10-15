@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """AI Bridge 会议室：用户 + Claude Code + Codex。以会议为单位，每个 AI 一个固定会话。
 只用标准库，只绑 127.0.0.1。"""
-import atexit, json, os, re, shutil, subprocess, tempfile, threading, queue, webbrowser, mimetypes, uuid, glob, hashlib, time, secrets, hmac
+import atexit, json, os, re, shutil, socket, subprocess, tempfile, threading, queue, webbrowser, mimetypes, uuid, glob, hashlib, time, secrets, hmac
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import unquote, parse_qs, quote
@@ -32,8 +32,10 @@ RT_TOKEN = secrets.token_urlsafe(24)   # 每次启动随机；页面加载时注
 # 你 / 系统 不在内：你 = 只能来自网页上用户的操作；系统 = 会议室自己
 EXTERNAL_SPEAKERS = ("claude", "codex")
 USER_ONLY_MSG = "这个接口只给网页上的用户用；外部程序请用 /api/post 并写明自己的身份"
-TIMEOUT = 600
-TIMEOUT_WORK = 1800   # 干活模式完全放开后，提交 / 推送大文件这类活十分钟不够
+TIMEOUT = 600          # 会议室自己跑的小命令（压缩之类）
+# AI 一轮：多久没有任何输出就停（真卡死），加一个总上限。2026-10-15 claude 本机出图等了 30 分钟被总时长掐掉，所以改成按"没动静"算。
+IDLE_LIMIT = {"discuss": 600, "work": 1200}
+TOTAL_LIMIT = {"discuss": 1800, "work": 7200}
 MODES = ("discuss", "work")
 MODE_NAME = {"discuss": "讨论模式", "work": "干活模式"}
 
@@ -76,8 +78,24 @@ BOARD_RULES = (
 )
 
 
+SEND_RULES = (
+    "发图片 / 文件：想把本机上的图片或文件直接给用户看，就在回复里单独起一行：【发送】文件路径"
+    "（完整路径，或相对工作目录的路径；一行一个，一次最多 %d 个，单个 %d MB 内）。"
+    "这行会被会议室收走，文件复制进会议附件、挂在你这条消息上，图片在页面上直接显示。"
+    "没发成会有系统消息说明原因。别只写路径让用户自己去找。"
+    "已经知道是哪个文件、只是发给用户时，直接写【发送】，不用先打开看（打开只是你自己看到，用户看不到，还白占上下文）；"
+    "要靠看内容才能挑出来时照常看，但先用文件名和文件夹缩小范围，一次少看几张。"
+    "说“出了一张图”“做好了”的时候，就用【发送】把它发出来，别只描述。\n"
+    "出图：codex 自带生图（不占本机显卡，用户账号的额度），出概念图、氛围图优先让 codex 用它，生成的图会议室会自动发出来。"
+    "本机显卡（ComfyUI 出图、渲染、训练这类重活）同一时间只能一个人用：动手前先 @ 对方说一声，对方在跑就等它跑完，别同时往上提交。\n"
+    "跑很久的活：先说一句在干什么、大概要多久。会议室 %d 分钟（讨论模式 %d 分钟）收不到你任何动静就会把你停掉，"
+    "等后台任务时隔一阵说一句进度，别一声不吭等太久；真要等很久就先结束这一轮，@用户 说清楚怎么接着看结果。"
+    % (MAX_ATTACH, MAX_UPLOAD // (1024 * 1024), IDLE_LIMIT["work"] // 60, IDLE_LIMIT["discuss"] // 60)
+)
+
+
 def mode_text(mode):
-    return (MODE_WORK if mode == "work" else MODE_DISCUSS) + "\n" + BOARD_RULES
+    return (MODE_WORK if mode == "work" else MODE_DISCUSS) + "\n" + BOARD_RULES + "\n" + SEND_RULES
 
 
 def mode_key(mode):
@@ -86,7 +104,16 @@ def mode_key(mode):
 
 
 def timeout_for(mode):
-    return TIMEOUT_WORK if mode == "work" else TIMEOUT
+    """返回 (多久没动静就停, 一轮总上限)，单位秒。"""
+    m = mode if mode in IDLE_LIMIT else "discuss"
+    return IDLE_LIMIT[m], TOTAL_LIMIT[m]
+
+
+def timeout_text(ai, why, mode):
+    idle, total = timeout_for(mode)
+    if why == "idle":
+        return "%s 超时了：%d 分钟没有任何动静，像是卡住了，已经停掉" % (ai, idle // 60)
+    return "%s 超时了：这一轮超过 %d 分钟，已经停掉" % (ai, total // 60)
 
 
 def preamble(mode="discuss"):
@@ -96,13 +123,15 @@ lock = threading.RLock()
 meta = None            # 当前会议的 meeting.json 内容；没有会议时为 None
 mdir = None            # 当前会议目录（完整路径）
 messages = []          # {id, speaker, text, time, attachments?, to_user?, quiet?}
-jobs = queue.Queue()   # 全局串行队列：(会议id, 类型, ai)  类型：reply（AI 之间的对话） / compact
+jobs = queue.Queue()   # 全局串行队列：(会议id, 类型, ai)  类型：reply（AI 之间的对话）
 pending = []           # 已排上（队列里或在等自己的锁）还没开始的 ai，避免同一个人被重复叫
 ai_locks = {"claude": threading.Lock(), "codex": threading.Lock()}   # 每个 AI 只有一个会话，同一个 AI 永远串行
-state = {"running": [], "chain": 0, "compact_q": 0,   # running：正在跑的 ai 名字列表（压缩时含 "compact"）
+state = {"running": [], "chain": 0,                  # running：正在跑的名字列表（压缩时是 "compact:claude" 这样）
+         "compacting": set(),                         # 排上或正在压缩的 AI（每个 AI 各压各的）
          "force_work": set(),                         # 下一轮不管会议在什么模式都按干活模式叫的 AI（落盘用）
          "epoch": {"claude": 0, "codex": 0},          # 停了谁就给谁加一；排队时记下，开跑时对不上就不跑
          "stopped": set()}                            # 被"停"打断、还没收尾的 AI
+live = {}         # ai -> {"text": 这一轮最近说的一句中途的话, "time": 时:分:秒, "since": 开跑的时间戳}；页面状态行显示
 live_procs = {}   # ai -> 正在跑的子进程（claude -p / 旧的 codex exec），"停"的时候连同子孙进程一起杀
 
 
@@ -733,6 +762,107 @@ def apply_board_cmds(speaker, text):
     return "\n".join(keep).strip(), changes
 
 
+SEND_CMD = re.compile(r"^\s*[【\[]发送[】\]]\s*(.*?)\s*$")
+
+
+def send_path(path):
+    """AI 写的路径 → 本机完整路径（去引号、展开 ~ 和环境变量、相对路径按工作目录）。"""
+    p = path.strip().strip("`'\"“”‘’<>").strip()
+    if not p:
+        return ""
+    p = os.path.expandvars(os.path.expanduser(p))
+    if not os.path.isabs(p):
+        p = os.path.join(workdir(), p)
+    return os.path.normpath(p)
+
+
+def send_file(path):
+    """把 AI 指名的本机文件复制进当前会议 files/，返回附件；不行就抛 ValueError（原因给人看）。"""
+    p = send_path(path)
+    if not p:
+        raise ValueError("没写路径")
+    if not os.path.isfile(p):
+        raise ValueError("找不到文件 %s" % p)
+    size = os.path.getsize(p)
+    if size > MAX_UPLOAD:
+        raise ValueError("%s 太大（%.1f MB，上限 %d MB）" % (p, size / 1048576, MAX_UPLOAD // 1048576))
+    fd_ = files_dir()
+    if fd_ and in_dir(p, fd_):   # 本来就是会议附件，不用再复制一份
+        return make_attachment(p)
+    with open(p, "rb") as f:
+        full = save_upload(os.path.basename(p), f.read, size)
+    return make_attachment(full)
+
+
+MD_IMAGE = re.compile(r"!\[([^\]\n]*)\]\(\s*(<[^>\n]+>|(?:[^()\s]|\([^()\n]*\))(?:[^()\n]|\([^()\n]*\))*?)\s*\)")   # 路径里允许一层成对括号，比如 a(1).png
+
+
+def md_local_path(target):
+    """markdown 图片的目标是不是本机路径；是就返回路径，网址 / data: 之类返回 None。"""
+    t = target.strip().strip("<>").strip()
+    if t.lower().startswith("file:"):
+        t = unquote(re.sub(r"^file:/*", "", t, flags=re.I))
+        if not re.match(r"^[A-Za-z]:", t):
+            t = "/" + t
+    if re.match(r"^[a-zA-Z][a-zA-Z0-9+.-]+:(?![\\/])", t) and not re.match(r"^[A-Za-z]:[\\/]", t):
+        return None   # http:、data: 这类
+    if re.match(r"^(//|https?:)", t, re.I):
+        return None
+    return t
+
+
+def apply_send_cmds(text):
+    """把 AI 回复里的【发送】路径行收走、复制文件；正文里指向本机路径的 markdown 图片 ![](路径) 也当发送（它们习惯这么写，网页又显示不了本地路径）。
+    返回 (剩下的正文, [附件], [没发成的原因])。代码块里的不算。"""
+    keep, atts, errs, fence, seen = [], [], [], False, set()
+
+    def send(path, label):
+        key = os.path.normcase(send_path(path))
+        if key and key in seen:
+            return True   # 同一个文件写了两遍（比如 codex 自己写了【发送】，会议室又按生图结果补了一行），只发一次
+        if len(atts) >= MAX_ATTACH:
+            errs.append("一次最多发 %d 个，%s 没发" % (MAX_ATTACH, label))
+            return False
+        try:
+            atts.append(send_file(path))
+            seen.add(key)
+            return True
+        except Exception as e:
+            errs.append(str(e) if isinstance(e, ValueError) else "%s 复制失败：%s" % (label, e))
+            return False
+
+    def md_img(m):
+        if m.string[:m.start()].count("`") % 2:   # 在行内代码里
+            return m.group(0)
+        path = md_local_path(m.group(2))
+        if path is None:
+            return m.group(0)
+        return "" if send(path, path) else m.group(0)   # 没发成就留着原文，至少看得到路径
+
+    for line in text.split("\n"):
+        if line.lstrip().startswith("```"):
+            fence = not fence
+        if fence:
+            keep.append(line)
+            continue
+        m = SEND_CMD.match(line)
+        if m:
+            send(m.group(1), m.group(1))
+            continue
+        if "![" in line:
+            new = MD_IMAGE.sub(md_img, line)
+            if new != line and not new.strip():
+                continue   # 整行只有图片，收走后不留空行
+            line = new.rstrip() if new != line else line
+        keep.append(line)
+    return re.sub(r"\n{3,}", "\n\n", "\n".join(keep)).strip(), atts, errs
+
+
+def send_note(by, errs):
+    if errs:
+        add_message("系统", "%s 的文件没发成：%s" % (by, "；".join(errs)))   # 不 quiet：发的人下一轮能看到
+
+
 def board_note(by, changes, not_for=None):
     if changes:
         add_message("系统", "看板：%s %s" % (by, "；".join(changes)), not_for=not_for)
@@ -837,9 +967,11 @@ def kill_tree(p):
             pass
 
 
-def run_stream(cmd, prompt, on_line=None, timeout=TIMEOUT, tag=None):
+def run_stream(cmd, prompt, on_line=None, timeout=(TIMEOUT, TIMEOUT), tag=None):
     """边跑边逐行读 stdout（让 on_line 能在 AI 中途就拿到它的操作记录；超时/崩了也不丢）。
-    返回 (退出码, stdout 全文, stderr 全文, 是否超时)。"""
+    timeout = (多久没输出就停, 总上限)。返回 (退出码, stdout 全文, stderr 全文, 超时原因 None / "idle" / "total")。"""
+    idle, total = timeout if isinstance(timeout, tuple) else (timeout, timeout)
+    t0, last = time.time(), [time.time()]
     env = dict(os.environ, PYTHONIOENCODING="utf-8")
     kw = {}
     if os.name == "nt":
@@ -853,6 +985,7 @@ def run_stream(cmd, prompt, on_line=None, timeout=TIMEOUT, tag=None):
     def rd_out():
         for raw in p.stdout:
             line = raw.decode("utf-8", "replace").rstrip("\r\n")
+            last[0] = time.time()
             lines.append(line)
             if on_line:
                 try:
@@ -871,11 +1004,17 @@ def run_stream(cmd, prompt, on_line=None, timeout=TIMEOUT, tag=None):
         p.stdin.close()
     except OSError:
         pass
-    timed_out = False
-    try:
-        p.wait(timeout=timeout)
-    except subprocess.TimeoutExpired:
-        timed_out = True
+    timed_out = None
+    while p.poll() is None:
+        now = time.time()
+        if now - last[0] > idle:
+            timed_out = "idle"
+        elif now - t0 > total:
+            timed_out = "total"
+        if timed_out:
+            break
+        time.sleep(1)
+    if timed_out:
         kill_tree(p)
         try:
             p.wait(timeout=15)
@@ -893,7 +1032,7 @@ def codex_mcp_servers():
     """~/.codex/config.toml 里配的全部 MCP 服务名（会议室里一律关掉，回得快）。名字只认字母数字下划线横杠，别的拼不进 -c。"""
     names = list(((_codex_cfg().get("mcp_servers")) or {}).keys())
     return [n for n in names if re.match(r"^[\w\-]+$", n)]
-CODEX_DISCUSS_OFF = ("apps", "computer_use", "browser_use", "image_generation")
+CODEX_DISCUSS_OFF = ("apps", "computer_use", "browser_use")   # 自带生图（image_generation）2026-10-15 起放开：不占本机显卡，生成的图会议室自动发出来
 
 
 # ===== 每场会议各自的模型 / effort =====
@@ -1096,6 +1235,8 @@ def parse_claude_line(line, edits, res):
             if n:
                 res["ctx_used"] = n
         for c in (j.get("message") or {}).get("content") or []:
+            if isinstance(c, dict) and c.get("type") == "text" and not j.get("parent_tool_use_id") and (c.get("text") or "").strip():
+                res["live"] = c["text"]   # 中途说的话；页面状态行显示最近一句
             if isinstance(c, dict) and c.get("type") == "tool_use" and c.get("name") in CLAUDE_EDIT_TOOLS:
                 inp = c.get("input") or {}
                 p = inp.get("file_path") or inp.get("notebook_path")
@@ -1325,6 +1466,21 @@ class CodexServer:
                         msgs.append(it["text"].strip())
                         if it.get("phase") == "final_answer":
                             final.append(it["text"].strip())
+                        else:
+                            res["live"] = it["text"]
+                            push_live("codex", res)
+                    elif t == "imageGeneration":   # 自带生图：生成好的图会议室自己发出来，不靠它记得写【发送】
+                        if meth == "item/started":
+                            res["live"] = "正在生成图片…"
+                            push_live("codex", res)
+                        elif it.get("savedPath"):
+                            if it["savedPath"] not in res.setdefault("gen_images", []):
+                                res["gen_images"].append(it["savedPath"])
+                        elif it.get("failure") or it.get("status") == "failed":
+                            f = it.get("failure") or {}
+                            res.setdefault("gen_fail", []).append(
+                                "生图额度用完了" + ("（%s 恢复）" % datetime.fromtimestamp(f["resetsAt"]).strftime("%m-%d %H:%M") if f.get("resetsAt") else "")
+                                if f.get("type") == "usageLimitExceeded" else "生图失败（%s）" % (f.get("type") or it.get("status")))
                 elif meth == "thread/tokenUsage/updated":
                     tu = pr.get("tokenUsage") or {}
                     last = tu.get("last") or {}
@@ -1344,13 +1500,15 @@ class CodexServer:
             try:
                 r = self.request("turn/start", tp, timeout=120, on_note=on_note)
                 state["turn"] = (r.get("turn") or {}).get("id")
-                deadline = time.time() + timeout_for(mode)
+                idle, total = timeout_for(mode)
+                t0 = last = time.time()
                 while state["done"] is None:
                     try:
-                        m = self._next(deadline)
+                        m = self._next(min(last + idle, t0 + total))
+                        last = time.time()
                     except TimeoutError:
                         self._interrupt(sid, state)
-                        return False, "codex 超时了", sid
+                        return False, timeout_text("codex", "idle" if time.time() - last >= idle else "total", mode), sid
                     if m is None:
                         return False, "codex 后台进程中途退出了\n" + "\n".join(self.err_tail()), sid
                     on_note(m)
@@ -1367,6 +1525,51 @@ class CodexServer:
                 return False, "codex 这一轮没跑完（%s）" % msg, sid
             out = "\n\n".join(final) if final else (msgs[-1] if msgs else "")
             return True, out, sid
+
+    def compact(self, sid, res=None):
+        """手动压缩一个会话：thread/resume → thread/compact/start → 等这一轮 turn/completed → thread/unsubscribe。
+        返回 True = 看到了压缩（contextCompaction 条目或 thread/compacted 通知）。"""
+        with self.call_lock:
+            if not self.alive():
+                self.stop()
+                self.start()
+            base = {"cwd": workdir(), "approvalPolicy": "never", "sandbox": "read-only"}
+            self.request("thread/resume", dict(base, threadId=sid, excludeTurns=True), timeout=180)
+            seen = {"compacted": False, "done": False}
+
+            def on_note(m):
+                meth, pr = m.get("method"), m.get("params") or {}
+                if pr.get("threadId") not in (None, sid):
+                    return
+                if meth == "thread/compacted":
+                    seen["compacted"] = True
+                elif meth == "item/completed" and (pr.get("item") or {}).get("type") == "contextCompaction":
+                    seen["compacted"] = True
+                elif meth == "thread/tokenUsage/updated" and res is not None:
+                    tu = pr.get("tokenUsage") or {}
+                    last = tu.get("last") or {}
+                    if last.get("totalTokens"):
+                        res["ctx_used"] = last["totalTokens"]
+                    if tu.get("modelContextWindow"):
+                        res["ctx_win"] = tu["modelContextWindow"]
+                elif meth == "turn/completed":
+                    seen["done"] = True
+
+            try:
+                self.request("thread/compact/start", {"threadId": sid}, timeout=120, on_note=on_note)
+                deadline = time.time() + 600
+                while not seen["done"]:
+                    m = self._next(deadline)
+                    if m is None:
+                        raise RuntimeError("codex 后台进程中途退出了")
+                    on_note(m)
+            finally:
+                if self.alive():
+                    try:
+                        self.request("thread/unsubscribe", {"threadId": sid}, timeout=30)
+                    except Exception:
+                        pass
+            return seen["compacted"]
 
     def _interrupt(self, sid, state):
         try:
@@ -1396,6 +1599,11 @@ def call_codex_appserver(prompt, sid, images, mode, model, effort, edits, res):
         return False, "codex 调用失败：%s%s" % (e, ("\n" + tail) if tail else ""), sid
     if not ok:
         return False, out, sid
+    # 自带生图生成的图：按【发送】挂到这条回复上（它自己也写了同一张的，apply_send_cmds 会去重）
+    extra = ["【发送】%s" % p for p in res.get("gen_images") or []]
+    extra += ["（%s）" % x for x in res.get("gen_fail") or []]
+    if extra:
+        out = (out + "\n\n" + "\n".join(extra)).strip()
     if not out:
         return False, "codex 没有返回内容", sid
     return True, out, new_sid
@@ -1418,7 +1626,7 @@ def call_ai(ai, prompt, session_id=None, images=(), mode=None):
             if not sid:
                 sid = str(uuid.uuid4())
                 cmd += ["--session-id", sid]
-            rc, so, se, to = run_stream(cmd, prompt, lambda l: parse_claude_line(l, edits, res), timeout_for(mode), ai)
+            rc, so, se, to = run_stream(cmd, prompt, lambda l: (parse_claude_line(l, edits, res), push_live(ai, res)), timeout_for(mode), ai)
             r = res.get("result") or {}
             out = (r.get("result") or "").strip() if isinstance(r.get("result"), str) else ""
             bad = bool(r.get("is_error"))
@@ -1450,7 +1658,7 @@ def call_ai(ai, prompt, session_id=None, images=(), mode=None):
             bad = False
             tail_src = se or so or ""
         if to:
-            return False, "%s 超时了" % ai, session_id, edits
+            return False, timeout_text(ai, to, mode), session_id, edits
         if rc != 0 or bad:
             tail = "\n".join(tail_src.strip().splitlines()[-6:])
             return False, "%s 出错了（退出码 %s）\n%s" % (ai, rc, tail), session_id, edits
@@ -1477,6 +1685,14 @@ def claude_boundaries(sid):
 
 def compact_native(ai, sid):
     """能真压缩就压缩，返回 True；这个 AI 不支持（codex exec 把 /compact 当普通文字）返回 False。"""
+    if ai == "codex":
+        if CODEX_BACKEND == "exec":
+            return False
+        try:
+            return codex_server.compact(sid)
+        except Exception:
+            codex_server.stop()   # 下一轮自动重起
+            raise
     if ai != "claude":
         return False
     exe = shutil.which("claude")
@@ -1915,8 +2131,9 @@ def handle_message(speaker, text, attachments=None, origin="room", reply_to=None
     with lock:
         if meta is None:
             return False
-        if speaker == "你" and not attachments and text.strip().lower() == "/compact":
-            request_compact()
+        cmd = text.strip().lower().split()
+        if speaker == "你" and not attachments and cmd and cmd[0] == "/compact" and len(cmd) <= 2 and set(cmd[1:]) <= set(AIS):
+            request_compact(cmd[1:] or AIS)
             return True
         if speaker == "你":
             names = mentions(text)
@@ -1931,12 +2148,15 @@ def handle_message(speaker, text, attachments=None, origin="room", reply_to=None
             to_user = "用户" in names
         else:
             targets, to_user = [], False
-        changes = []
+        changes, send_errs = [], []
         if speaker in AIS:
             text, changes = apply_board_cmds(speaker, text)
-        if text or attachments or not changes:
+            text, sent, send_errs = apply_send_cmds(text)
+            attachments = (attachments or []) + sent
+        if text or attachments or not (changes or send_errs):
             add_message(speaker, text, attachments, to_user, origin="external" if external else None, reply_to=reply_to)
         board_note(speaker, changes, not_for=None if external else speaker)
+        send_note(speaker, send_errs)
         if speaker == "你":
             state["chain"] = 0
         for t in targets:
@@ -1947,11 +2167,17 @@ def handle_message(speaker, text, attachments=None, origin="room", reply_to=None
     return True
 
 
-def request_compact():
+def request_compact(targets=AIS):
+    """每个 AI 各压各的：各开一个线程，只等它自己的锁，另一个 AI 照常能叫。返回这次排上的 AI（已在压的不重复排）。"""
     with lock:
-        state["compact_q"] += 1
-        jobs.put((mid_now(), "compact", None))
-        system_note("开始压缩…")
+        mid = mid_now()
+        todo = [a for a in AIS if a in targets and a not in state["compacting"]]
+        state["compacting"].update(todo)
+        if todo:
+            system_note("开始压缩：" + "、".join(todo))
+    for a in todo:
+        threading.Thread(target=process_compact, args=(mid, a), daemon=True).start()
+    return todo
 
 
 WRAPUP_TEXT = (
@@ -2041,11 +2267,18 @@ def stop_all():
 
 def busy_for(ai=None):
     with lock:
-        if state["compact_q"] or "compact" in state["running"]:
-            return True
         if ai is None:
-            return bool(state["running"] or pending)
-        return ai in state["running"] or ai in pending
+            return bool(state["running"] or pending or state["compacting"])
+        return ai in state["running"] or ai in pending or ai in state["compacting"]
+
+
+def push_live(ai, res):
+    """AI 一轮里中途说的话（claude 的文字块、codex 的 commentary）放进 live，页面状态行显示最近一句；不进会议记录。"""
+    t = res.pop("live", None)
+    if t and ai in live:
+        t = t.strip()
+        live[ai]["text"] = t if len(t) <= 400 else t[:400] + "…"
+        live[ai]["time"] = datetime.now().strftime("%H:%M:%S")
 
 
 def run_job(ai, mid, user):
@@ -2068,6 +2301,7 @@ def process_job(ai, mid, user=False):
             if not user and meta.get(ai + "_session") and not delta_for(ai)[0]:
                 return   # AI 之间的对话排到它时，该看的它已经看过了，不白叫
             state["running"].append(ai)
+            live[ai] = {"text": "", "time": "", "since": time.time()}
         try:
             mode = "work" if forced else meta.get("mode", "discuss")
             pre = None
@@ -2113,9 +2347,11 @@ def process_job(ai, mid, user=False):
                     state["chain"] += 1
                 if was_stopped:   # 刚好在"停"的时候说完：话照登，但里面的 @ 不再叫人
                     rest, ch = apply_board_cmds(ai, out)
-                    if rest or not ch:
-                        add_message(ai, rest, to_user="用户" in mentions(rest, exclude=ai))
+                    rest, sent, errs = apply_send_cmds(rest)
+                    if rest or sent or not (ch or errs):
+                        add_message(ai, rest, sent, to_user="用户" in mentions(rest, exclude=ai))
                     board_note(ai, ch, not_for=ai)
+                    send_note(ai, errs)
                 else:
                     handle_message(ai, out)
             else:
@@ -2126,6 +2362,7 @@ def process_job(ai, mid, user=False):
             with lock:
                 if ai in state["running"]:
                     state["running"].remove(ai)
+                live.pop(ai, None)
 
 
 def compact_one(ai):
@@ -2141,7 +2378,11 @@ def compact_one(ai):
         with lock:
             meta["ctx"][ai] = None   # 压完多少不知道，下一轮回话后再显示
             save_meta()
-        return "%s 真压缩了" % ai
+        return "%s 压缩好了" % ai
+    if ai == "codex":   # codex 不走"摘要换新会话"：压不了就直说，它快满时自己也会自动压
+        if CODEX_BACKEND == "exec":
+            return "codex（exec 方式）不支持手动压缩，它快装不下时会自己压"
+        return "codex 没压成（没看到压缩记录），会话没动"
     # 退化：让它写摘要，再新建会话，第一条消息是前言 + 公告 + 摘要
     d, upto = delta_for(ai)
     body = "\n\n".join(fmt_message(m) for m in d)
@@ -2174,26 +2415,31 @@ def compact_one(ai):
     return "%s 续接（摘要 + 新会话）" % ai
 
 
-def process_compact(mid):
-    with lock:
-        state["compact_q"] = max(0, state["compact_q"] - 1)
-        if mid != mid_now() or meta is None:
-            return
-        state["running"].append("compact")
+def process_compact(mid, ai):
+    """压一个 AI：等它手上的活干完（它自己的锁），压完插一条系统消息。"""
     try:
-        res = []
-        # codex 在 exec resume 下会自己自动压缩（2026-10-13 实测，会话记录里出现 compacted），这里只压 claude
-        for ai in ("claude",):
+        with ai_locks[ai]:
+            with lock:
+                if mid != mid_now() or meta is None:
+                    return
+                state["running"].append("compact:" + ai)
             try:
-                with ai_locks[ai]:   # 等这个 AI 手上的活干完
-                    res.append(compact_one(ai))
+                r = compact_one(ai)
             except Exception as e:
-                res.append("%s 压缩出错：%s" % (ai, e))
-        system_note("已压缩：" + "；".join(res))
+                r = "%s 压缩出错：%s" % (ai, e)
+            finally:
+                with lock:
+                    if "compact:" + ai in state["running"]:
+                        state["running"].remove("compact:" + ai)
+        system_note(r)
     finally:
         with lock:
-            if "compact" in state["running"]:
-                state["running"].remove("compact")
+            state["compacting"].discard(ai)
+
+
+def queued_count():
+    """排着还没开始的：等着回话的 AI + 等着压缩的 AI。"""
+    return len(pending) + len([a for a in state["compacting"] if "compact:" + a not in state["running"]])
 
 
 def set_handoff(ai, on):
@@ -2232,10 +2478,7 @@ def worker():
     while True:
         mid, kind, ai = jobs.get()
         try:
-            if kind == "compact":
-                process_compact(mid)
-            else:
-                process_job(ai, mid, False)
+            process_job(ai, mid, False)
         except Exception as e:
             add_message("系统", "内部错误：%s" % e)
 
@@ -2247,7 +2490,7 @@ def api_state():
         ais = {}
         for a in AIS:
             ais[a] = {"session": bool(meta.get(a + "_session")), "handed_off": meta["handed_off"][a],
-                      "busy": busy_for(a), "cmd": handoff_cmd(a), "model": model_info(a),
+                      "busy": busy_for(a), "compacting": a in state["compacting"], "cmd": handoff_cmd(a), "model": model_info(a),
                       "ctx": meta["ctx"].get(a)}
         return {"meeting": mid_now(), "title": meta["title"], "status": meta["status"],
                 "archived": is_archived(meta["status"]),
@@ -2255,7 +2498,8 @@ def api_state():
                 "board": meta["board"], "workdir": workdir(), "default_workdir": PROJECT, "stop_each": True,
                 "mode": meta.get("mode", "discuss"),
                 "steps_undone": [int(k) for k, v in meta["steps"].items() if v.get("undone")],
-                "running": list(state["running"]), "queued": len(pending) + state["compact_q"]}
+                "running": list(state["running"]), "queued": queued_count(),
+                "live": {a: {"text": v["text"], "time": v["time"], "secs": int(time.time() - v["since"])} for a, v in list(live.items())}}
 
 
 USER_ONLY_PATHS = ("/api/send", "/api/upload", "/api/announcement", "/api/mode", "/api/undo", "/api/undo/preview",
@@ -2364,7 +2608,7 @@ class Handler(BaseHTTPRequestHandler):
                         pass
             with lock:
                 self._json(200, {"meeting": mid_now(), "messages": messages[since:], "next": len(messages),
-                                 "running": list(state["running"]), "queued": len(pending) + state["compact_q"]})
+                                 "running": list(state["running"]), "queued": queued_count()})
         else:
             self._send(404, b"not found", "text/plain")
 
@@ -2518,8 +2762,13 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/compact":
                 if meta is None:
                     return self._json(409, {"error": "还没有会议"})
-                request_compact()
-                return self._json(200, {"ok": True})
+                who = str(data.get("ai") or "") if isinstance(data, dict) else ""
+                if who and who not in AIS:
+                    return self._json(400, {"error": "ai 只能是 claude / codex，或者不填（两个都压）"})
+                todo = request_compact([who] if who else AIS)
+                if not todo:
+                    return self._json(409, {"error": "%s已经在压缩了" % (who or "两个都")})
+                return self._json(200, {"ok": True, "ais": todo})
             if path == "/api/handoff":
                 ok, msg = set_handoff(str(data.get("ai", "")), bool(data.get("on")))
                 return self._json(200 if ok else 409, {"ok": ok, "error": msg})
@@ -2544,11 +2793,26 @@ class Handler(BaseHTTPRequestHandler):
         self._send(404, b"not found", "text/plain")
 
 
+class ExclusiveServer(ThreadingHTTPServer):
+    """端口独占：已经有会议室在跑时绑定失败，而不是两个进程悄悄共用一个端口。"""
+    allow_reuse_address = os.name != "nt"   # Windows 的 SO_REUSEADDR 会允许重复绑定；别的系统上它只管 TIME_WAIT，留着
+
+    def server_bind(self):
+        if os.name == "nt" and hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
+            self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        super().server_bind()
+
+
 def main():
     load_current()
-    threading.Thread(target=worker, daemon=True).start()
-    srv = ThreadingHTTPServer((HOST, PORT), Handler)
     url = "http://%s:%d/" % (HOST, PORT)
+    try:
+        srv = ExclusiveServer((HOST, PORT), Handler)
+    except OSError:
+        # 2026-10-14：Windows 上默认的 SO_REUSEADDR 让第二个会议室也绑上了同一个端口，请求落到老进程上，新代码不生效还看不出来
+        print("端口 %d 已经被占了：多半已经有一个会议室在跑（可能是桌面快捷方式在后台开的）。直接打开 %s ，或者先关掉那个再开。" % (PORT, url))
+        return
+    threading.Thread(target=worker, daemon=True).start()
     print("会议室已启动：" + url + ("" if meta else "（还没有会议，在页面里开一个）"))
     if os.environ.get("ROUNDTABLE_NO_BROWSER") != "1":
         threading.Timer(0.5, lambda: webbrowser.open(url)).start()
