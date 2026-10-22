@@ -9,6 +9,10 @@
 <meta name="apple-mobile-web-app-title" content="AI Bridge">
 <meta name="color-scheme" content="light dark">
 <meta name="rt-token" content="__RT_TOKEN__">
+<meta name="theme-color" content="#1b1b1e">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/static/icon-192.png">
+<link rel="apple-touch-icon" href="/static/icon-192.png">
 <title>会议室</title>
 <style>
 /* ===== 颜色 / 字体：浅色默认，深色跟系统 ===== */
@@ -61,6 +65,50 @@ body.work header{box-shadow:inset 0 -2px 0 var(--work)}
 .cap.think .cn::before{animation:pulse 1.2s ease-in-out infinite}
 @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.35;transform:scale(.75)}}
 
+/* ===== 会议列表（电脑左边栏最上面；手机收进"会议列表"弹窗）===== */
+#rooms{display:none}
+.rl{list-style:none;margin:0;padding:0}
+.rl li a{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:9px;color:var(--fg);text-decoration:none;font-size:13.5px;line-height:1.35}
+.rl li a:hover{background:var(--hover)}
+.rl li.cur a{background:var(--soft);font-weight:600}
+.rl .dot{flex:none;width:8px;height:8px;border-radius:50%;background:transparent;border:1.5px solid var(--faint)}
+.rl .dot.run{background:var(--btn);border-color:var(--btn);animation:pulse 1.2s ease-in-out infinite}
+.rl .dot.you{background:var(--work);border-color:var(--work)}
+.rl .dot.new{background:var(--faint);border-color:var(--faint)}
+.rl .t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rl .b{flex:none;font-size:11px;font-weight:600;padding:0 6px;border-radius:999px;line-height:1.6;background:var(--soft);color:var(--mut)}
+.rl .b.you{background:color-mix(in srgb,var(--work) 16%,transparent);color:var(--work)}
+.rl .b.run{background:color-mix(in srgb,var(--btn) 14%,transparent);color:var(--btn)}
+.rl li.arch a{opacity:.55}
+#menu.attn{position:relative}
+#menu.attn::after{content:"";position:absolute;top:3px;right:3px;width:8px;height:8px;border-radius:50%;background:var(--work)}
+
+/* ===== 正在改的文件（文件护栏）===== */
+#claims{display:none;margin-top:14px;border-top:1px solid var(--line);padding-top:10px}
+#claims.on{display:block}
+#claims .ch{display:flex;align-items:center;gap:8px;font-size:11.5px;font-weight:600;color:var(--faint);letter-spacing:.08em;margin-bottom:6px}
+#claims .ch button{margin-left:auto;font-size:11.5px;letter-spacing:0;font-weight:500}
+#claimList{list-style:none;margin:0;padding:0}
+#claimList li{display:flex;gap:8px;align-items:flex-start;padding:5px 6px;border-radius:8px;font-size:12.5px;line-height:1.45}
+#claimList li:hover{background:var(--hover)}
+#claimList .cf{flex:1;min-width:0;word-break:break-all}
+#claimList .cf b{font-weight:600}
+#claimList .cf small{display:block;color:var(--mut)}
+#claimList .ai-claude b{color:var(--claude)}#claimList .ai-codex b{color:var(--codex)}
+#claimList button{flex:none;font-size:11.5px !important;padding:1px 8px !important}
+
+/* ===== 工具（MCP / 插件 / 技能）===== */
+.tl{list-style:none;margin:0 0 10px;padding:0;max-height:30vh;overflow-y:auto;border:1px solid var(--line);border-radius:10px}
+.tl li{display:flex;gap:9px;align-items:flex-start;padding:7px 10px;border-bottom:1px solid var(--line);font-size:13.5px;line-height:1.45}
+.tl li:last-child{border-bottom:0}
+.tl input{margin:3px 0 0;flex:none;accent-color:var(--btn);width:auto !important}
+.tl .tn{flex:1;min-width:0;word-break:break-all}
+.tl .tn small{display:block;color:var(--mut);font-size:12px}
+.tl .tg{display:inline-block;font-size:10.5px;font-weight:600;padding:0 6px;margin-left:6px;border-radius:999px;background:var(--soft);color:var(--mut);vertical-align:1px}
+.tl li.lk{opacity:.6}
+.tl .empty{color:var(--mut);justify-content:center}
+#mbox h4{margin:12px 0 6px;font-size:13px;font-weight:650;color:var(--mut)}
+
 /* ===== 弹窗 ===== */
 #modal{display:none;position:fixed;inset:0;z-index:50;background:rgba(10,10,12,.4);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);align-items:center;justify-content:center;padding:16px}
 #modal.show{display:flex;animation:fade .15s ease-out}
@@ -100,6 +148,8 @@ body.work header{box-shadow:inset 0 -2px 0 var(--work)}
 #boardBtn{display:inline-block}
 #board{display:none;margin-top:8px;border-top:1px solid var(--line);padding-top:8px}
 #ann.open #board{display:block}
+#claims.on{display:none}
+#ann.open #claims.on{display:block}
 #boardList{list-style:none;margin:0 0 8px;padding:0;max-height:40vh;overflow-y:auto}
 #boardList li{display:flex;gap:8px;align-items:flex-start;padding:6px;border-radius:8px}
 #boardList li:hover{background:var(--hover)}
@@ -239,8 +289,12 @@ textarea{flex:1;min-width:0;font-size:15px;font-family:inherit;line-height:1.5;p
 
 /* ===== 电脑：左边栏（标题、两个 AI、按钮、完整公告）+ 右边聊天 ===== */
 @media(min-width:1000px){
-  body{display:grid;grid-template-columns:300px minmax(0,1fr);grid-template-rows:auto minmax(0,1fr) auto auto;
-       grid-template-areas:"head feed" "ann feed" "ann status" "ann foot"}
+  body{display:grid;grid-template-columns:300px minmax(0,1fr);grid-template-rows:auto auto minmax(0,1fr) auto auto;
+       grid-template-areas:"rooms feed" "head feed" "ann feed" "ann status" "ann foot"}
+  #rooms{display:block;grid-area:rooms;background:var(--side);border-right:1px solid var(--line);border-bottom:1px solid var(--line);padding:14px 10px 10px;max-height:36vh;overflow-y:auto}
+  #rooms .rh{display:flex;align-items:center;gap:6px;padding:0 8px 6px;font-size:11.5px;font-weight:600;color:var(--faint);letter-spacing:.08em}
+  #rooms .rh button{margin-left:auto;font-size:12px;letter-spacing:0;padding:2px 9px;border:1px solid var(--line);background:var(--bar);color:var(--fg);border-radius:7px}
+  #rooms .rh button:hover{background:var(--soft)}
   header{grid-area:head;flex-direction:column;align-items:stretch;gap:14px;padding:22px 18px 16px;border-bottom:0;border-right:1px solid var(--line);background:var(--side);backdrop-filter:none;-webkit-backdrop-filter:none}
   body.work header{box-shadow:inset 0 3px 0 var(--work)}
   #title{white-space:normal;font-size:18px;line-height:1.35}
@@ -255,12 +309,13 @@ textarea{flex:1;min-width:0;font-size:15px;font-family:inherit;line-height:1.5;p
   #bar .cap .cm::before,#bar .cap .cs::before,#bar .cap .cx::before{content:none}
   #bar .cap.off .cn{color:var(--fg)}
   #ann{grid-area:ann;border-bottom:0;border-right:1px solid var(--line);padding:4px 18px 18px;overflow-y:auto;font-size:13.5px}
-  #ann::before{content:"公告";display:block;font-size:11.5px;font-weight:600;color:var(--faint);margin:8px 0;letter-spacing:.08em}
+  #ann::before{content:"目标";display:block;font-size:11.5px;font-weight:600;color:var(--faint);margin:8px 0;letter-spacing:.08em}
   #ann .top{flex-direction:column;align-items:stretch;gap:8px}
   #annText,#ann.open #annText{display:block;-webkit-line-clamp:unset;overflow:visible;max-height:none;color:var(--fg);cursor:default}
   #ann button{align-self:flex-start}
   #boardBtn{display:none !important}
   #board{display:block;margin-top:18px;padding-top:14px}
+  #claims.on{display:block}
   #board::before{content:"看板";display:block;font-size:11.5px;font-weight:600;color:var(--faint);margin-bottom:8px;letter-spacing:.08em}
   #boardList{max-height:none}
   #board .badd select,#board .badd input{font-size:13.5px}
@@ -301,9 +356,65 @@ textarea{flex:1;min-width:0;font-size:15px;font-family:inherit;line-height:1.5;p
   #jump button{width:32px;height:32px;opacity:.85}
   #jump button.dim{opacity:.35}
 }
+/* 看图 / 标注 */
+#viewer{display:none;position:fixed;inset:0;z-index:60;background:rgba(8,8,10,.94);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);color:#ececf1;flex-direction:column}
+#viewer.on{display:flex}
+#viewer .vbar{display:flex;align-items:center;gap:6px;padding:8px 10px;flex-wrap:wrap;flex:none}
+#viewer .vbar .grow{flex:1;min-width:0;font-size:13px;color:#a1a1aa;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#viewer button,#viewer a.vb{background:rgba(255,255,255,.08);color:#ececf1;border:1px solid rgba(255,255,255,.12);border-radius:9px;padding:6px 11px;font-size:13px;cursor:pointer;text-decoration:none;line-height:1.3}
+#viewer button:hover,#viewer a.vb:hover{background:rgba(255,255,255,.16)}
+#viewer button.on{background:#3b82f6;border-color:#3b82f6}
+#viewer button.pri{background:#2563eb;border-color:#2563eb}
+#viewer button:disabled{opacity:.35;cursor:default}
+#vStage{flex:1;min-height:0;position:relative;display:flex;align-items:center;justify-content:center;overflow:hidden;touch-action:pan-y pinch-zoom}
+#vStage.zoom{overflow:auto;display:block;touch-action:auto}
+#vImg{max-width:100%;max-height:100%;object-fit:contain;cursor:zoom-in;-webkit-user-select:none;user-select:none}
+#vStage.zoom #vImg{max-width:none;max-height:none;cursor:zoom-out;margin:auto;display:block}
+#vStage .nav{position:absolute;top:50%;transform:translateY(-50%);width:44px;height:64px;border-radius:12px;font-size:26px;padding:0;z-index:2}
+#vPrev{left:10px}#vNext{right:10px}
+#vWrap{position:relative;display:none;touch-action:none}
+#vWrap canvas{display:block}
+#vOv{position:absolute;left:0;top:0;pointer-events:none}
+#viewer.edit #vImg,#viewer.edit .nav{display:none}
+#viewer.edit #vWrap{display:block}
+#viewer .vedit{display:none}
+#viewer.edit .vedit{display:flex}
+#viewer.edit .vview{display:none}
+#vTools{gap:6px;align-items:center;flex-wrap:wrap}
+#vTools .sw{width:24px;height:24px;padding:0;border-radius:50%;border:2px solid rgba(255,255,255,.25)}
+#vTools .sw.on{border-color:#fff;box-shadow:0 0 0 2px #3b82f6}
+#vTools .sep{width:1px;height:22px;background:rgba(255,255,255,.15);margin:0 2px}
+#vHint{font-size:12px;color:#a1a1aa;padding:0 12px 8px;text-align:center;flex:none}
+@media (max-width:700px){
+  #viewer .vbar{padding:6px 8px;gap:5px}
+  #viewer button,#viewer a.vb{padding:6px 9px}
+  #vStage .nav{width:36px;height:52px;font-size:22px;background:rgba(0,0,0,.35)}
+  #vPrev{left:4px}#vNext{right:4px}
+}
+.chip img{cursor:pointer}
+/* 我的发言目录 */
+#toc{display:none;position:fixed;z-index:16;width:340px;max-width:calc(100vw - 24px);max-height:62vh;flex-direction:column;background:var(--bar);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow-lg);overflow:hidden}
+#toc.on{display:flex}
+#toc .hd{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--line);font-weight:600;font-size:14px}
+#toc .hd .n{color:var(--mut);font-weight:400;font-size:12px}
+#toc .hd input{flex:1;min-width:0;font:inherit;font-weight:400;font-size:13px;padding:5px 9px;border:1px solid var(--line);border-radius:8px;background:var(--soft);color:var(--fg)}
+#toc .hd button{border:0;background:none;color:var(--mut);font-size:20px;line-height:1;padding:0 4px;cursor:pointer}
+#tocList{list-style:none;margin:0;padding:4px;overflow-y:auto}
+#tocList li{display:flex;gap:10px;padding:8px 10px;border-radius:9px;cursor:pointer;font-size:13px;line-height:1.45}
+#tocList li:hover{background:var(--hover)}
+#tocList li.cur{background:var(--me);box-shadow:inset 3px 0 0 var(--btn)}
+#tocList .t{color:var(--faint);font-variant-numeric:tabular-nums;flex:none}
+#tocList .x{overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;word-break:break-all}
+#tocList .empty{color:var(--mut);cursor:default;justify-content:center}
+#tocList .empty:hover{background:none}
+@media (max-width:700px){
+  #toc{left:0!important;right:0!important;bottom:0!important;width:auto;max-width:none;max-height:70vh;border-radius:16px 16px 0 0}
+  #tocList li{padding:11px 12px;font-size:14px}
+}
 </style>
 </head>
 <body>
+<nav id="rooms"><div class="rh">会议<button type="button" id="rNew" title="开一场新会议（别的会议照常跑）">＋ 新会议</button></div><ul class="rl" id="roomList"></ul></nav>
 <header>
   <div id="title">会议室</div><div id="wd"></div><span id="modeTag">干活模式</span>
   <button type="button" id="menu" aria-label="菜单">&#9776;</button>
@@ -315,14 +426,30 @@ textarea{flex:1;min-width:0;font-size:15px;font-family:inherit;line-height:1.5;p
 <div id="modal"><div id="mbox"></div></div>
 <div id="cmenu"></div>
 <div id="ann">
-  <div class="top"><div id="annText">（暂无公告）</div><button type="button" id="boardBtn">看板</button><button type="button" id="annBtn">编辑</button></div>
-  <div id="annEdit"><textarea id="annTa" placeholder="当前任务公告…"></textarea>
+  <div class="top"><div id="annText">（还没写这场会议的目标）</div><button type="button" id="boardBtn">看板</button><button type="button" id="annBtn">编辑目标</button></div>
+  <div id="annEdit"><textarea id="annTa" placeholder="这场会议要做成什么…（两个 AI 每次被叫时都会看到最新的）"></textarea>
     <div class="btns"><button type="button" id="annSave">保存</button><button type="button" id="annCancel">取消</button></div></div>
   <div id="board"><ul id="boardList"></ul>
     <div class="badd"><select id="bKind"><option value="todo">待办</option><option value="note">公告</option></select><input id="bText" maxlength="500" placeholder="加一条…"><button type="button" id="bAdd">加</button></div></div>
+  <div id="claims"><div class="ch">正在改的文件<button type="button" id="cMine" title="你自己在手动改的文件，占住它，AI 就不会去改">我在改…</button></div><ul id="claimList"></ul></div>
 </div>
 <div id="feed"></div>
-<div id="jump"><button type="button" id="jUp" title="上一条我的发言（长按：到顶）" aria-label="上一条我的发言"><svg viewBox="0 0 24 24"><path d="M6 15l6-6 6 6"/></svg></button><button type="button" id="jDn" title="下一条我的发言（长按：到底）" aria-label="下一条我的发言"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button></div>
+<div id="toc"><div class="hd">我的发言 <span class="n" id="tocN"></span><input id="tocQ" placeholder="搜一下…" aria-label="搜我的发言"><button type="button" id="tocX" aria-label="关闭">&times;</button></div><ul id="tocList"></ul></div>
+<div id="viewer">
+  <div class="vbar vview"><span class="grow" id="vInfo"></span><button type="button" id="vEdit">标注 / 裁剪</button><a class="vb" id="vOrig" target="_blank" rel="noopener">原图</a><button type="button" id="vClose">关闭</button></div>
+  <div class="vbar vedit" id="vTools">
+    <button type="button" data-tool="pen" class="on">画笔</button><button type="button" data-tool="arrow">箭头</button><button type="button" data-tool="rect">框</button><button type="button" data-tool="text">文字</button><button type="button" data-tool="crop">裁剪</button>
+    <span class="sep"></span>
+    <button type="button" class="sw on" data-color="#ef4444" style="background:#ef4444" aria-label="红"></button><button type="button" class="sw" data-color="#facc15" style="background:#facc15" aria-label="黄"></button><button type="button" class="sw" data-color="#22c55e" style="background:#22c55e" aria-label="绿"></button><button type="button" class="sw" data-color="#3b82f6" style="background:#3b82f6" aria-label="蓝"></button><button type="button" class="sw" data-color="#ffffff" style="background:#ffffff" aria-label="白"></button><button type="button" class="sw" data-color="#111111" style="background:#111111" aria-label="黑"></button>
+    <span class="sep"></span>
+    <button type="button" id="vThick" title="线条粗细">中</button><button type="button" id="vUndo" disabled>撤销</button>
+    <span class="grow"></span>
+    <button type="button" id="vSave" title="下载到本机">存到本机</button><button type="button" id="vCancel">取消</button><button type="button" id="vDone" class="pri">放进输入框</button>
+  </div>
+  <div id="vStage"><button type="button" class="nav" id="vPrev" aria-label="上一张">&#8249;</button><img id="vImg" alt=""><div id="vWrap"><canvas id="vCv"></canvas><canvas id="vOv"></canvas></div><button type="button" class="nav" id="vNext" aria-label="下一张">&#8250;</button></div>
+  <div id="vHint"></div>
+</div>
+<div id="jump"><button type="button" id="jToc" title="我的发言目录" aria-label="我的发言目录"><svg viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01"/></svg></button><button type="button" id="jUp" title="上一条我的发言（长按：到顶）" aria-label="上一条我的发言"><svg viewBox="0 0 24 24"><path d="M6 15l6-6 6 6"/></svg></button><button type="button" id="jDn" title="下一条我的发言（长按：到底）" aria-label="下一条我的发言"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button></div>
 <div id="status"><div id="stMain"><span id="stText"></span><div id="stLive"></div></div><span id="stops"></span></div>
 <footer>
   <div class="quick"><button type="button" data-ins="@claude ">@claude</button><button type="button" data-ins="@codex ">@codex</button><button type="button" data-ins="@用户 ">@用户</button></div>
@@ -336,6 +463,10 @@ const feed=document.getElementById('feed'),ta=document.getElementById('ta'),st=d
 const touch=matchMedia('(pointer:coarse)').matches||('ontouchstart' in window);
 let since=0,curMeeting=undefined,S=null;
 const msgById={};
+// 这个标签页开着的会议（会议号在地址栏 ?r=…；每个标签页可以开不同的会议）
+let RID=new URLSearchParams(location.search).get('r')||null;
+const api=a=>'/api/r/'+encodeURIComponent(RID||'-')+'/'+a;
+if('serviceWorker' in navigator&&(location.protocol==='https:'||location.hostname==='127.0.0.1'||location.hostname==='localhost'))navigator.serviceWorker.register('/sw.js').catch(()=>{});
 function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
 function render(t,md){
   const parts=t.split('```');let h='';
@@ -406,7 +537,7 @@ function attHtml(list){
   if(!list||!list.length)return '';
   return '<div class="atts">'+list.map(a=>{
     const u=esc(a.url||''),n=esc(a.name);
-    if(a.kind==='image')return '<a href="'+u+'" target="_blank" rel="noopener"><img src="'+u+'" alt="'+n+'" loading="lazy"></a>';
+    if(a.kind==='image')return '<a class="img" href="'+u+'" data-name="'+n+'" target="_blank" rel="noopener"><img src="'+u+'" alt="'+n+'" loading="lazy"></a>';
     if(a.kind==='audio')return '<audio controls preload="none" src="'+u+'"></audio>';
     return '<a class="file" href="'+u+'" download="'+n+'">'+n+' · '+fmtSize(a.size)+'</a>';
   }).join('')+'</div>';
@@ -442,16 +573,24 @@ function drawStatus(){
   const h=Object.keys(lv).filter(a=>lv[a].text&&lastRun.running.includes(a)).map(a=>'<div class="ln '+esc(a)+(openLive.has(a)?' open':'')+'" data-ai="'+esc(a)+'" title="点一下展开 / 收起"><b>'+esc(a)+'</b><span class="t">'+esc(lv[a].time.slice(0,5))+'</span>'+esc(lv[a].text)+'</div>').join('');
   if(stLive.innerHTML!==h)stLive.innerHTML=h;
 }
+let polling=null;   // 正在拉哪场会议的消息（同一场不叠着拉，免得同一条加两遍；切到别的会议时不用等）
 async function poll(){
+  if(!RID||polling===RID)return;
+  const rid=RID;polling=rid;
   try{
-    const r=await fetch('/api/messages?since='+since,{cache:'no-store'});
+    const r=await fetch(api('messages')+'?since='+since,{cache:'no-store'});
+    if(r.status===404){polling=null;return roomGone()}
     const j=await r.json();
-    if(j.meeting!==curMeeting){curMeeting=j.meeting;feed.innerHTML='';if(since!==0||j.messages.length<j.next){since=0;return poll()}}
+    if(rid!==RID)return;   // 等回来的时候已经切到别的会议了
+    if(j.meeting!==curMeeting){curMeeting=j.meeting;feed.innerHTML='';if(since!==0||j.messages.length<j.next){since=0;polling=null;return poll()}}
     const atBottom=feed.scrollHeight-feed.scrollTop-feed.clientHeight<60;
     j.messages.forEach(add);since=j.next;
     if(j.messages.length&&atBottom)feed.scrollTop=feed.scrollHeight;
     lastRun={running:j.running||[],queued:j.queued||0};
+    if(!document.hidden)markSeen(rid,j.next);
   }catch(e){}
+  finally{if(polling===rid)polling=null}
+  if(rid!==RID)return;
   await loadState();
   drawStatus();
 }
@@ -464,6 +603,8 @@ function drawPend(){
     const c=document.createElement('div');c.className='chip';
     c.innerHTML=(a.kind==='image'?'<img src="'+esc(a.url)+'">':'')+'<span>'+esc(a.name)+'</span><button class="x" type="button">&times;</button>';
     c.querySelector('.x').onclick=()=>{pend.splice(i,1);drawPend()};
+    const im=c.querySelector('img');
+    if(im)im.onclick=()=>{const ims=pend.map((p,k)=>({url:p.url,name:p.name,pend:k})).filter(p=>pend[p.pend].kind==='image');openViewer(ims,ims.findIndex(p=>p.pend===i))};
     pendEl.appendChild(c);
   });
   if(uploading){const c=document.createElement('div');c.className='chip';c.textContent='上传中 '+uploading+' 个…';pendEl.appendChild(c)}
@@ -471,7 +612,7 @@ function drawPend(){
 async function upload(f){
   uploading++;drawPend();
   try{
-    const r=await fetch('/api/upload?name='+encodeURIComponent(f.name||'file'),{method:'POST',body:f});
+    const r=await fetch(api('upload')+'?name='+encodeURIComponent(f.name||'file'),{method:'POST',body:f});
     const j=await r.json();
     if(!r.ok)throw new Error(j.error||r.status);
     pend.push(j);
@@ -554,7 +695,7 @@ async function send(){
   try{
     const body={text,attachments:atts.map(a=>({path:a.path,kind:a.kind}))};
     if(qm){body.reply_to=qm.id;if(qm.part)body.reply_part=qm.part}
-    const r=await fetch('/api/send',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const r=await fetch(api('send'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     if(!r.ok)throw 0;
   }catch(e){ta.value=text;pend=atts;drawPend();if(qm){quote=qm;quoteEl.classList.add('on')}}
   poll();setTimeout(()=>{feed.scrollTop=feed.scrollHeight},100);
@@ -562,7 +703,7 @@ async function send(){
 // 公告
 const annEl=document.getElementById('ann'),annText=document.getElementById('annText'),annEdit=document.getElementById('annEdit'),annTa=document.getElementById('annTa'),annBtn=document.getElementById('annBtn');
 let annVal='';
-function showAnn(){annText.textContent=annVal.trim()||'（暂无公告）'}
+function showAnn(){annText.textContent=annVal.trim()||'（还没写这场会议的目标，点"编辑目标"写一句：要做成什么）'}
 function loadAnn(){if(S&&annEdit.style.display!=='block'){annVal=S.announcement||'';showAnn()}}
 annText.onclick=()=>annEl.classList.toggle('open');
 annBtn.onclick=()=>{annTa.value=annVal;annEdit.style.display='block';annEl.classList.remove('open');annText.style.display='none';annBtn.style.display='none';annTa.focus()};
@@ -570,9 +711,9 @@ function closeEdit(){annEdit.style.display='none';annText.style.display='';annBt
 document.getElementById('annCancel').onclick=closeEdit;
 document.getElementById('annSave').onclick=async()=>{
   try{
-    const r=await fetch('/api/announcement',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:annTa.value})});
+    const r=await fetch(api('announcement'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:annTa.value})});
     if(!r.ok)throw 0;annVal=annTa.value;showAnn();closeEdit();poll();
-  }catch(e){alert('公告保存失败（可能超过 16KB）')}
+  }catch(e){alert('目标保存失败（可能超过 16KB）')}
 };
 
 // 看板
@@ -592,7 +733,7 @@ function drawBoard(){
     '<span class="bt">#'+i.id+' '+esc(i.text)+'<small>'+esc(i.by)+'</small></span><button type="button" class="bx" title="删掉">&times;</button></li>').join('')
     :'<li class="empty">（空的。你和两个 AI 都能往这写公告、待办）</li>';
 }
-async function boardPost(o){const [ok,j]=await post('/api/board',o);if(!ok)alert(j.error||'失败');await loadState();poll()}
+async function boardPost(o){const [ok,j]=await post(api('board'),o);if(!ok)alert(j.error||'失败');await loadState();poll()}
 boardList.onclick=e=>{
   const li=e.target.closest('li[data-id]');if(!li)return;const id=+li.dataset.id;
   if(e.target.matches('input[type=checkbox]'))boardPost({op:e.target.checked?'done':'undone',id});
@@ -637,7 +778,7 @@ function drawState(){
   titleEl.innerHTML=has?esc(S.title)+(other?' <span class="wdn">· '+esc(wdName)+'</span>':''):'（还没有会议）';
   titleEl.title=wd;
   document.getElementById('wd').textContent=has?'📁 '+wd:'';
-  document.title=has?S.title+' · 会议室':'会议室';
+  drawRooms();
   [['claude','capClaude'],['codex','capCodex']].forEach(([a,id])=>{const b=document.getElementById(id),[t,c]=capText(a);if(b.innerHTML!==t)b.innerHTML=t;b.className=c;b.title=ctxTitle(S&&S.ais&&S.ais[a])});
   const cx=S&&S.ais&&S.ais.claude;
   document.getElementById('bWrap').disabled=!has||!cx||cx.handed_off||cx.busy;
@@ -648,81 +789,82 @@ function drawState(){
   loadAnn();
   drawBoard();
   drawStops();
-  if(!has&&!modal.classList.contains('show')&&!window._askedNew){window._askedNew=true;openNew(true)}
+  drawClaims();
 }
 function syncUndo(){
   const done=new Set((S&&S.steps_undone)||[]);
   document.querySelectorAll('.undo').forEach(b=>{const u=done.has(+b.dataset.step);b.disabled=u;b.textContent=u?'已撤回':'撤回这一步'});
 }
 async function undoStep(n){
-  const [pok,pj]=await post('/api/undo/preview',{step:n});
+  const [pok,pj]=await post(api('undo/preview'),{step:n});
   if(!pok){alert(pj.error||'失败');await loadState();poll();return}
   const pl=pj.plan||{items:[],outside:[]};
   const lst=pl.items.map(i=>{const a=i.act==='删除'?'删除（这步新增的）':i.act==='还原'?'还原成改前':'撤不回，不动';return a+'  '+i.path}).join('\n');
   if(!confirm('撤回 '+pl.ai+' 的这一步？只动它自己记录里的这些文件：\n\n'+lst+(pl.outside.length?'\n\n项目外的文件撤不回：\n'+pl.outside.join('\n'):'')))return;
-  const [ok,j]=await post('/api/undo',{step:n});
+  const [ok,j]=await post(api('undo'),{step:n});
   if(!ok)alert(j.error||'失败');
   await loadState();poll();
 }
 async function toggleMode(){
   const to=(S&&S.mode==='work')?'discuss':'work';
   if(to==='work'&&!confirm('切到干活模式？\n\nclaude 和 codex 拿到完整权限，跟你平时在桌面版里用一样：改文件、跑命令、联网、用 git。只有 MCP 工具不加载（为了回得快）。\n它们用编辑工具改的文件每一步都记下来，可以一键撤回；用命令写的文件、删掉的文件、git 操作撤不回。'))return;
-  const [ok,j]=await post('/api/mode',{mode:to});
+  const [ok,j]=await post(api('mode'),{mode:to});
   if(!ok)alert(j.error||'失败');
   bar.classList.remove('show');await loadState();poll();
 }
-async function loadState(){try{S=await (await fetch('/api/state',{cache:'no-store'})).json();drawState()}catch(e){}}
+async function loadState(){
+  if(!RID)return;const rid=RID;
+  try{const r=await fetch(api('state'),{cache:'no-store'});if(r.status===404)return roomGone();const j=await r.json();if(rid!==RID)return;S=j;drawState()}catch(e){}
+}
 function showModal(html){mbox.innerHTML=html;modal.classList.add('show')}
 function hideModal(){modal.classList.remove('show')}
 modal.onclick=e=>{if(e.target===modal)hideModal()};
 async function post(url,obj){const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(obj||{})});let j={};try{j=await r.json()}catch(e){}return [r.ok,j]}
 async function openNew(first){
   let recent=[];
-  try{const j=await (await fetch('/api/meetings',{cache:'no-store'})).json();recent=[...new Set(j.meetings.map(m=>m.workdir).filter(Boolean))]}catch(e){}
-  const defWd=(S&&S.workdir)||(S&&S.default_workdir)||recent[0]||'';
-  showModal('<h3>新会议</h3>'+(first?'<div class="hint">还没有会议，开一个吧。</div>':'<div class="hint">当前会议保持原样，直接切到新会议。</div>')+
-    '<input id="nTitle" placeholder="标题" maxlength="60"><textarea id="nAnn" placeholder="公告（可留空）"></textarea>'+
+  let defAll='';
+  try{const j=await (await fetch('/api/rooms',{cache:'no-store'})).json();recent=[...new Set(j.rooms.map(m=>m.workdir).filter(Boolean))];defAll=j.default_workdir||''}catch(e){}
+  const defWd=(S&&S.workdir)||recent[0]||defAll||'';
+  showModal('<h3>新会议</h3>'+(first?'<div class="hint">还没有会议，开一个吧。</div>':'<div class="hint">开着的会议照常跑，这个标签页切到新会议（想并排看就在新标签页里开）。</div>')+
+    '<input id="nTitle" placeholder="标题" maxlength="60"><textarea id="nAnn" placeholder="目标：这场会议要做成什么（可留空，之后再写）"></textarea>'+
     (S&&!('default_workdir' in S)?'':'<input id="nWd" list="wdList" placeholder="工作文件夹，比如 D:\\别的项目" value="'+esc(defWd)+'"><datalist id="wdList">'+recent.map(w=>'<option value="'+esc(w)+'">').join('')+'</datalist>'+
     '<div class="hint">两个 AI 在这个文件夹里看文件、干活。填完整路径（在资源管理器地址栏复制）；开会后不能改，换文件夹就开新会议。</div>')+
     '<div class="btns"><button type="button" id="nCancel">取消</button><button type="button" class="pri" id="nOk">开会</button></div>');
   document.getElementById('nCancel').onclick=hideModal;
   document.getElementById('nOk').onclick=async()=>{
-    const [ok,j]=await post('/api/meetings/new',{title:document.getElementById('nTitle').value,announcement:document.getElementById('nAnn').value,workdir:(document.getElementById('nWd')||{}).value||''});
+    const [ok,j]=await post('/api/rooms/new',{title:document.getElementById('nTitle').value,announcement:document.getElementById('nAnn').value,workdir:(document.getElementById('nWd')||{}).value||''});
     if(!ok){alert(j.error||'失败');return}
-    hideModal();bar.classList.remove('show');poll();
+    hideModal();bar.classList.remove('show');switchRoom(j.id);pollRooms();
   };
   document.getElementById('nTitle').focus();
 }
 async function openList(showTrash){
-  const j=await (await fetch('/api/meetings',{cache:'no-store'})).json();
+  const j=await (await fetch('/api/rooms',{cache:'no-store'})).json();
   const tj=await (await fetch('/api/trash',{cache:'no-store'})).json();
-  const rows=j.meetings.map(m=>'<div class="item'+(m.archived?' arch':'')+'" data-id="'+esc(m.id)+'"><span class="tt">'+esc(m.title)+(m.current?' <small>（当前）</small>':'')+(m.archived?' <small>（已归档）</small>':'')+'</span><span class="acts"><small>'+esc(m.created.slice(5,16))+'</small>'+
-    '<button type="button" class="ab" data-on="'+(m.archived?0:1)+'">'+(m.archived?'取消归档':'归档')+'</button><button type="button" class="db"'+(m.current?' disabled':'')+'>删除</button></span></div>').join('');
+  const rows=j.rooms.map(m=>{const cur=m.id===RID,b=roomBadge(m);return '<div class="item'+(m.archived?' arch':'')+'" data-id="'+esc(m.id)+'"><span class="tt">'+(b?'<span class="rl"><span class="b '+b[0]+'">'+esc(b[1])+'</span></span> ':'')+esc(m.title)+(cur?' <small>（这个标签页）</small>':'')+(m.archived?' <small>（已归档）</small>':'')+'</span><span class="acts"><small>'+esc(m.created.slice(5,16))+'</small>'+
+    '<button type="button" class="ab" data-on="'+(m.archived?0:1)+'">'+(m.archived?'取消归档':'归档')+'</button><button type="button" class="db"'+(cur||(m.running||[]).length?' disabled':'')+'>删除</button></span></div>'}).join('');
   const trows=tj.trash.map(m=>'<div class="item" data-id="'+esc(m.id)+'" data-title="'+esc(m.title)+'"><span class="tt">'+esc(m.title)+'</span><span class="acts"><small>'+esc(m.created.slice(5,16))+'</small><button type="button" class="rb">恢复</button></span></div>').join('');
   showModal('<h3>会议列表</h3>'+(rows||'<div class="hint">还没有会议</div>')+
     '<div class="btns" style="margin-top:10px"><button type="button" id="lTrash">回收站（'+tj.trash.length+'）</button><button type="button" id="lClose">关闭</button></div>'+
     '<div id="trashBox" style="display:'+(showTrash?'block':'none')+'"><h3 style="margin-top:14px">回收站</h3>'+(trows||'<div class="hint">空的</div>')+
     (tj.trash.length?'<div class="btns" style="margin-top:8px"><button type="button" id="lPurge">清空回收站</button></div>':'')+
-    '<div class="hint">清空后找不回来，这些会议里 AI 自己的会话（~/.claude、~/.codex 下）也一起删；别的会议还在用的不删。</div></div>');
+    '<div class="hint">清空后找不回来，这些会议里 AI 自己的会话（~/.claude、~/.codex 下）也一起删；别的会议还在用的不删。</div></div>'+
+    '<div class="hint" style="margin-top:12px">几场会议可以同时跑。想并排看：在会议上按 Ctrl 点（或鼠标中键）在新标签页打开。</div>');
   document.getElementById('lClose').onclick=hideModal;
   document.getElementById('lTrash').onclick=()=>{const b=document.getElementById('trashBox');b.style.display=b.style.display==='none'?'block':'none'};
   const act=async(url,body)=>{const [ok,jj]=await post(url,body);if(!ok){alert(jj.error||'失败');return false}return true};
   mbox.querySelectorAll('#trashBox .item').forEach(el=>{
-    el.querySelector('.rb').onclick=async e=>{e.stopPropagation();if(await act('/api/trash/restore',{id:el.dataset.id}))openList(true)};
+    el.querySelector('.rb').onclick=async e=>{e.stopPropagation();if(await act('/api/trash/restore',{id:el.dataset.id})){pollRooms();openList(true)}};
   });
   const pg=document.getElementById('lPurge');
   if(pg)pg.onclick=async()=>{if(!confirm('清空回收站？清空后找不回来。\n\n这些会议里 claude、codex 各自的会话（~/.claude、~/.codex 下的记录）也一起删掉；别的会议还在用的不删。'))return;if(await act('/api/trash/purge',{}))openList(true)};
   mbox.querySelectorAll('.item').forEach(el=>{
     if(el.closest('#trashBox'))return;
-    el.querySelector('.ab').onclick=async e=>{e.stopPropagation();if(await act('/api/meetings/archive',{id:el.dataset.id,on:el.querySelector('.ab').dataset.on==='1'})){await loadState();openList()}};
+    el.querySelector('.ab').onclick=async e=>{e.stopPropagation();if(await act('/api/rooms/archive',{id:el.dataset.id,on:el.querySelector('.ab').dataset.on==='1'})){await loadState();pollRooms();openList()}};
     el.querySelector('.db').onclick=async e=>{e.stopPropagation();
       if(!confirm('把「'+el.querySelector('.tt').textContent+'」移到回收站？（可以恢复）\n\n清空回收站时，这场会议里 claude、codex 各自的会话也会一起删掉。'))return;
-      if(await act('/api/meetings/delete',{id:el.dataset.id}))openList(true)};
-    el.onclick=async()=>{
-      const [ok,jj]=await post('/api/meetings/open',{id:el.dataset.id});
-      if(!ok){alert(jj.error||'失败');return}
-      hideModal();bar.classList.remove('show');poll();
-    };
+      if(await act('/api/rooms/delete',{id:el.dataset.id})){pollRooms();openList(true)}};
+    el.onclick=()=>{hideModal();bar.classList.remove('show');switchRoom(el.dataset.id)};
   });
 }
 function fallbackCopy(t){const x=document.createElement('textarea');x.value=t;document.body.appendChild(x);x.select();try{document.execCommand('copy')}catch(e){}x.remove()}
@@ -744,27 +886,29 @@ function openAi(a){
     '<div class="btns"><button type="button" id="aCompact"'+(canC?'':' disabled')+'>压缩 '+a+'</button></div>';
   const mo=x.model||{models:[],efforts:[],model:'',effort:''};
   const anyBusy=!!(S&&((S.running||[]).length||S.queued));
-  h+='<h3 style="margin-top:14px">模型和 effort（这场会议）</h3><div class="hint">现在生效：'+esc(mo.label||'默认 · 默认')+'。空 = 跟随全局设置。</div>'+
-    '<input class="mi" id="mModel" list="mModels" placeholder="跟随全局（可手填模型名）" value="'+esc(mo.model)+'"><datalist id="mModels">'+mo.models.map(v=>'<option value="'+esc(v)+'">').join('')+'</datalist>'+
-    '<select id="mEffort"><option value="">跟随全局</option>'+mo.efforts.map(v=>'<option value="'+esc(v)+'"'+(v===mo.effort?' selected':'')+'>'+esc(v)+'</option>').join('')+'</select>'+
+  h+='<h3 style="margin-top:14px">模型和 effort（这场会议）</h3><div class="hint">现在生效：'+esc(mo.label||'默认 · 默认')+'。空 = 用会议室默认（'+esc(mo.default||'')+'）。</div>'+
+    '<input class="mi" id="mModel" list="mModels" placeholder="会议室默认（可手填模型名）" value="'+esc(mo.model)+'"><datalist id="mModels">'+mo.models.map(v=>'<option value="'+esc(v)+'">').join('')+'</datalist>'+
+    '<select id="mEffort"><option value="">默认</option>'+mo.efforts.map(v=>'<option value="'+esc(v)+'"'+(v===mo.effort?' selected':'')+'>'+esc(v)+'</option>').join('')+'</select>'+
     '<div class="btns"><button type="button" id="mSave"'+(anyBusy?' disabled':'')+'>保存模型设置</button></div>'+
     '<div class="hint" id="mHint">'+(anyBusy?'有 AI 在跑或排队，说完才能改。':'中途换模型，下一轮会慢一点、费一点。')+'</div>';
+  h+='<h3 style="margin-top:14px">工具（这场会议）</h3><div id="toolsBox"><div class="hint">读取中…</div></div>';
   showModal(h);
+  loadTools(a,x);
   document.getElementById('mSave').onclick=async()=>{
     const nm=document.getElementById('mModel').value.trim(),ne=document.getElementById('mEffort').value;
     if(nm!==mo.model&&x.session&&!confirm('中途换模型，下一轮会慢一点、费一点。继续？'))return;
-    const [ok,j]=await post('/api/models',{ai:a,model:nm,effort:ne});
+    const [ok,j]=await post(api('models'),{ai:a,model:nm,effort:ne});
     if(!ok){alert(j.error||'失败');return}
     await loadState();poll();openAi(a);
   };
   document.getElementById('aClose').onclick=hideModal;
   document.getElementById('aCompact').onclick=async()=>{
     if(!confirm('压缩 '+a+' 的上下文？压完它只记要点。'+(x.busy?'\n\n它手上有活，会等这一轮说完再压。':'')))return;
-    const [ok,j]=await post('/api/compact',{ai:a});if(!ok)alert(j.error||'失败');await loadState();poll();openAi(a);
+    const [ok,j]=await post(api('compact'),{ai:a});if(!ok)alert(j.error||'失败');await loadState();poll();openAi(a);
   };
   const c=document.getElementById('aCopy');if(c)c.onclick=()=>{copyText(x.cmd);c.textContent='已复制'};
   document.getElementById('aToggle').onclick=async()=>{
-    const [ok,j]=await post('/api/handoff',{ai:a,on:!x.handed_off});
+    const [ok,j]=await post(api('handoff'),{ai:a,on:!x.handed_off});
     if(!ok){alert(j.error||'失败');return}
     await loadState();poll();openAi(a);
   };
@@ -786,11 +930,11 @@ function drawStops(){
 async function stopAi(a){
   const who=a||'两个 AI';
   if(!confirm('强行打断 '+who+'？\n\n正在跑的立刻停掉，连同它起的命令（比如 git push）；它排着的也清掉。\n已经改了的文件不会自动还原，干活模式下可以按步骤撤回。'))return;
-  const [ok,j]=await post('/api/stop',a?{ai:a}:{});if(!ok)alert(j.error||'失败');poll();
+  const [ok,j]=await post(api('stop'),a?{ai:a}:{});if(!ok)alert(j.error||'失败');poll();
 }
 document.getElementById('bWrap').onclick=async()=>{
   if(!confirm('落盘？\n\nclaude 会把这场会议定下的结论写进工作文件夹里的文档（文件夹里有 wrapup 技能就照它做），然后 git 提交并推送。\n这一轮它有完整权限，不管现在是讨论还是干活模式。'))return;
-  const [ok,j]=await post('/api/wrapup');if(!ok)alert(j.error||'失败');bar.classList.remove('show');poll();
+  const [ok,j]=await post(api('wrapup'));if(!ok)alert(j.error||'失败');bar.classList.remove('show');poll();
 };
 document.getElementById('capClaude').onclick=()=>openAi('claude');
 document.getElementById('capCodex').onclick=()=>openAi('codex');
@@ -841,7 +985,339 @@ const queueJump=()=>{if(!jumpRaf)jumpRaf=requestAnimationFrame(()=>{jumpRaf=0;sy
 feed.addEventListener('scroll',queueJump);addEventListener('resize',queueJump);
 if(window.ResizeObserver){const ro=new ResizeObserver(queueJump);ro.observe(feed);ro.observe(document.querySelector('footer'))}
 setInterval(queueJump,1500);
-poll().then(()=>{feed.scrollTop=feed.scrollHeight;queueJump()});setInterval(poll,1500);
+// 我的发言目录：列出"你"说过的每一句，点一下跳过去
+const tocEl=document.getElementById('toc'),tocList=document.getElementById('tocList'),tocQ=document.getElementById('tocQ');
+const narrow=()=>innerWidth<=700;
+function tocLine(m){
+  const t=(m.text||'').replace(/```[\s\S]*?(```|$)/g,' [代码] ').replace(/\s+/g,' ').trim();
+  const n=(m.attachments||[]).length;
+  return (t||'')+(n?(t?' ':'')+'📎'+n:'')||'（空）';
+}
+function curMine(){const mid=feedTop()+feed.clientHeight/3;return myMsgs().filter(e=>e.getBoundingClientRect().top<=mid).pop()}
+function drawToc(){
+  const q=tocQ.value.trim().toLowerCase(),cur=curMine();
+  const els=myMsgs();
+  document.getElementById('tocN').textContent=els.length+' 条';
+  tocList.innerHTML='';
+  let curLi=null;
+  els.forEach((el,i)=>{
+    const m=msgById[+el.dataset.id];if(!m)return;
+    const line=tocLine(m);
+    if(q&&line.toLowerCase().indexOf(q)<0)return;
+    const li=document.createElement('li');
+    li.innerHTML='<span class="t">'+esc((m.time||'').slice(0,5)||'#'+(i+1))+'</span><span class="x">'+esc(line)+'</span>';
+    li.title=(m.text||'').slice(0,400);
+    if(el===cur){li.classList.add('cur');curLi=li}
+    li.onclick=()=>{goTo(el);if(narrow())closeToc();else{tocList.querySelectorAll('.cur').forEach(x=>x.classList.remove('cur'));li.classList.add('cur')}};
+    tocList.appendChild(li);
+  });
+  if(!tocList.children.length){const li=document.createElement('li');li.className='empty';li.textContent=q?'没搜到':'你还没发过言';tocList.appendChild(li)}
+  if(curLi)curLi.scrollIntoView({block:'center'});
+}
+function placeToc(){
+  if(narrow()){tocEl.style.left=tocEl.style.right=tocEl.style.bottom='';return}
+  const r=jumpEl.getBoundingClientRect();
+  tocEl.style.right=(innerWidth-r.left+8)+'px';
+  tocEl.style.bottom=(innerHeight-r.bottom)+'px';
+  tocEl.style.left='auto';
+}
+function openToc(){tocQ.value='';tocEl.classList.add('on');placeToc();drawToc();if(!touch)tocQ.focus()}
+function closeToc(){tocEl.classList.remove('on')}
+document.getElementById('jToc').onclick=()=>tocEl.classList.contains('on')?closeToc():openToc();
+document.getElementById('tocX').onclick=closeToc;
+tocQ.addEventListener('input',drawToc);
+document.addEventListener('pointerdown',e=>{if(tocEl.classList.contains('on')&&!tocEl.contains(e.target)&&!e.target.closest('#jToc'))closeToc()});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&tocEl.classList.contains('on'))closeToc()});
+addEventListener('resize',()=>{if(tocEl.classList.contains('on'))placeToc()});
+
+// 看图：就在这一页里看，左右切换；能画笔 / 箭头 / 框 / 文字 / 裁剪，改完的图放进输入框
+const vw=document.getElementById('viewer'),vStage=document.getElementById('vStage'),vImg=document.getElementById('vImg');
+const vCv=document.getElementById('vCv'),vOv=document.getElementById('vOv'),vWrap=document.getElementById('vWrap'),vHint=document.getElementById('vHint');
+const vctx=vCv.getContext('2d'),octx=vOv.getContext('2d');
+let vList=[],vIdx=0,ed=null;
+function openViewer(list,i){if(!list.length)return;vList=list;vIdx=Math.max(0,i);vw.classList.add('on');showImg()}
+function closeViewer(){if(ed&&ed.hist.length&&!confirm('标注还没放进输入框，丢掉？'))return;endEdit();vw.classList.remove('on');vImg.removeAttribute('src')}
+function showImg(){
+  const it=vList[vIdx];endEdit();vStage.classList.remove('zoom');vImg.removeEventListener('load',startEdit);
+  vImg.src=it.url;vImg.alt=it.name||'';
+  document.getElementById('vOrig').href=it.url;
+  document.getElementById('vInfo').textContent=(vList.length>1?(vIdx+1)+' / '+vList.length+'  ':'')+(it.name||'');
+  document.getElementById('vPrev').style.visibility=vIdx>0?'':'hidden';
+  document.getElementById('vNext').style.visibility=vIdx<vList.length-1?'':'hidden';
+  vHint.textContent=vList.length>1?(touch?'左右滑动切换 · 点图看原尺寸':'← → 切换 · 点图看原尺寸 · Esc 关闭'):(touch?'点图看原尺寸':'点图看原尺寸 · Esc 关闭');
+}
+function step(d){const j=vIdx+d;if(j<0||j>=vList.length||ed)return;vIdx=j;showImg()}
+feed.addEventListener('click',e=>{
+  const a=e.target.closest('.atts a.img');
+  if(!a||e.ctrlKey||e.metaKey||e.shiftKey||e.altKey||e.button)return;   // Ctrl 点照旧开新标签页
+  e.preventDefault();
+  const els=[...feed.querySelectorAll('.atts a.img')];
+  openViewer(els.map(x=>({url:x.getAttribute('href'),name:x.dataset.name||''})),els.indexOf(a));
+});
+document.getElementById('vPrev').onclick=()=>step(-1);
+document.getElementById('vNext').onclick=()=>step(1);
+document.getElementById('vClose').onclick=closeViewer;
+vImg.onclick=()=>{if(!swiped)vStage.classList.toggle('zoom')};
+vStage.addEventListener('click',e=>{if(e.target===vStage&&!ed)closeViewer()});
+// 手机左右滑
+let sx=null,sy=0,swiped=false;
+vStage.addEventListener('pointerdown',e=>{swiped=false;if(ed||vStage.classList.contains('zoom')||e.pointerType==='mouse')return;sx=e.clientX;sy=e.clientY});
+vStage.addEventListener('pointerup',e=>{if(sx==null)return;const dx=e.clientX-sx,dy=e.clientY-sy;sx=null;if(Math.abs(dx)>50&&Math.abs(dx)>Math.abs(dy)*1.5){swiped=true;step(dx<0?1:-1)}});
+vStage.addEventListener('pointercancel',()=>{sx=null});
+document.addEventListener('keydown',e=>{
+  if(!vw.classList.contains('on'))return;
+  if(e.key==='Escape'){e.preventDefault();ed?cancelEdit():closeViewer();return}
+  if(ed){if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'){e.preventDefault();undoEdit()}return}
+  if(e.key==='ArrowLeft')step(-1);else if(e.key==='ArrowRight')step(1);
+});
+// —— 标注 ——
+const TOOL_HINT={pen:'按住拖动画线',arrow:'从起点拖到箭头指的地方',rect:'拖出一个框',text:'点一下要写字的位置',crop:'拖出要留下的区域，松手就裁'};
+const THICK=[['细',.6],['中',1],['粗',1.8]];
+function startEdit(){
+  if(!vImg.complete){vImg.addEventListener('load',startEdit,{once:true});return}   // 刚切过来还在加载：加载完再进
+  if(!vImg.naturalWidth){alert('这张图打不开');return}
+  vStage.classList.remove('zoom');
+  ed={hist:[],tool:ed&&ed.tool||'pen',color:document.querySelector('#vTools .sw.on').dataset.color,thick:ed?ed.thick:1,drag:null};
+  setSize(vImg.naturalWidth,vImg.naturalHeight);vctx.drawImage(vImg,0,0);
+  vw.classList.add('edit');syncTools();fitCanvas();
+}
+function endEdit(){ed=null;vw.classList.remove('edit')}
+function cancelEdit(){if(ed.hist.length&&!confirm('丢掉这次的标注？'))return;endEdit()}
+function setSize(w,h){vCv.width=vOv.width=w;vCv.height=vOv.height=h}
+function fitCanvas(){
+  if(!ed)return;
+  const W=vStage.clientWidth-16,H=vStage.clientHeight-16,s=Math.min(W/vCv.width,H/vCv.height,1);
+  const w=Math.round(vCv.width*s)+'px',h=Math.round(vCv.height*s)+'px';
+  vCv.style.width=vOv.style.width=w;vCv.style.height=vOv.style.height=h;
+}
+addEventListener('resize',fitCanvas);
+function syncTools(){
+  document.querySelectorAll('#vTools [data-tool]').forEach(b=>b.classList.toggle('on',b.dataset.tool===ed.tool));
+  document.getElementById('vUndo').disabled=!ed.hist.length;
+  document.getElementById('vThick').textContent=THICK.find(t=>t[1]===ed.thick)[0];
+  vHint.textContent=TOOL_HINT[ed.tool]+(touch?'':' · Ctrl+Z 撤销 · Esc 取消');
+  vWrap.style.cursor=ed.tool==='text'?'text':'crosshair';
+}
+document.querySelectorAll('#vTools [data-tool]').forEach(b=>b.onclick=()=>{ed.tool=b.dataset.tool;syncTools()});
+document.querySelectorAll('#vTools .sw').forEach(b=>b.onclick=()=>{document.querySelectorAll('#vTools .sw').forEach(x=>x.classList.toggle('on',x===b));if(ed)ed.color=b.dataset.color});
+document.getElementById('vThick').onclick=()=>{const i=THICK.findIndex(t=>t[1]===ed.thick);ed.thick=THICK[(i+1)%THICK.length][1];syncTools()};
+document.getElementById('vEdit').onclick=startEdit;
+document.getElementById('vCancel').onclick=cancelEdit;
+document.getElementById('vUndo').onclick=()=>undoEdit();
+function lw(){return Math.max(2,Math.round(Math.max(vCv.width,vCv.height)/170*ed.thick))}
+function snap(){
+  const c=document.createElement('canvas');c.width=vCv.width;c.height=vCv.height;c.getContext('2d').drawImage(vCv,0,0);
+  ed.hist.push(c);if(ed.hist.length>30)ed.hist.shift();syncTools();
+}
+function undoEdit(){
+  if(!ed||!ed.hist.length)return;
+  const c=ed.hist.pop();setSize(c.width,c.height);vctx.drawImage(c,0,0);fitCanvas();syncTools();
+}
+function pt(e){const r=vCv.getBoundingClientRect();return {x:(e.clientX-r.left)*vCv.width/r.width,y:(e.clientY-r.top)*vCv.height/r.height}}
+function stroke(c,col,w){c.strokeStyle=col;c.fillStyle=col;c.lineWidth=w;c.lineCap='round';c.lineJoin='round'}
+function drawArrow(c,a,b){
+  const w=c.lineWidth,ang=Math.atan2(b.y-a.y,b.x-a.x),hl=Math.max(w*4,12);
+  c.beginPath();c.moveTo(a.x,a.y);c.lineTo(b.x-Math.cos(ang)*hl*.6,b.y-Math.sin(ang)*hl*.6);c.stroke();
+  c.beginPath();c.moveTo(b.x,b.y);c.lineTo(b.x-hl*Math.cos(ang-.45),b.y-hl*Math.sin(ang-.45));c.lineTo(b.x-hl*Math.cos(ang+.45),b.y-hl*Math.sin(ang+.45));c.closePath();c.fill();
+}
+function box(a,b){return {x:Math.min(a.x,b.x),y:Math.min(a.y,b.y),w:Math.abs(b.x-a.x),h:Math.abs(b.y-a.y)}}
+function preview(a,b){
+  octx.clearRect(0,0,vOv.width,vOv.height);stroke(octx,ed.color,lw());
+  if(ed.tool==='arrow')drawArrow(octx,a,b);
+  else if(ed.tool==='rect'){const r=box(a,b);octx.strokeRect(r.x,r.y,r.w,r.h)}
+  else if(ed.tool==='crop'){
+    const r=box(a,b);octx.fillStyle='rgba(0,0,0,.55)';octx.fillRect(0,0,vOv.width,vOv.height);octx.clearRect(r.x,r.y,r.w,r.h);
+    octx.setLineDash([lw()*3,lw()*2]);octx.strokeStyle='#fff';octx.lineWidth=Math.max(1,lw()/2);octx.strokeRect(r.x,r.y,r.w,r.h);octx.setLineDash([]);
+  }
+}
+vWrap.addEventListener('pointerdown',e=>{
+  if(!ed||e.button)return;e.preventDefault();
+  const p=pt(e);
+  if(ed.tool==='text'){
+    const s=prompt('写什么？');if(!s||!s.trim())return;
+    snap();const fs=Math.max(16,Math.round(Math.max(vCv.width,vCv.height)/32*ed.thick));
+    vctx.font='bold '+fs+'px system-ui,"Microsoft YaHei",sans-serif';vctx.textBaseline='top';
+    vctx.lineWidth=Math.max(2,fs/7);vctx.lineJoin='round';vctx.strokeStyle=ed.color==='#111111'?'#fff':'rgba(0,0,0,.75)';vctx.fillStyle=ed.color;
+    s.split('\n').forEach((l,i)=>{vctx.strokeText(l,p.x,p.y+i*fs*1.25);vctx.fillText(l,p.x,p.y+i*fs*1.25)});
+    return;
+  }
+  vWrap.setPointerCapture(e.pointerId);
+  ed.drag={a:p,b:p};
+  if(ed.tool==='pen'){snap();stroke(vctx,ed.color,lw());vctx.beginPath();vctx.moveTo(p.x,p.y);vctx.lineTo(p.x+.01,p.y);vctx.stroke()}
+});
+vWrap.addEventListener('pointermove',e=>{
+  if(!ed||!ed.drag)return;
+  const p=pt(e),d=ed.drag;
+  if(ed.tool==='pen'){vctx.beginPath();vctx.moveTo(d.b.x,d.b.y);vctx.lineTo(p.x,p.y);vctx.stroke();d.b=p}
+  else{d.b=p;preview(d.a,p)}
+});
+function finishDrag(){
+  if(!ed||!ed.drag)return;
+  const {a,b}=ed.drag;ed.drag=null;octx.clearRect(0,0,vOv.width,vOv.height);
+  if(ed.tool==='pen')return;
+  const r=box(a,b),min=Math.max(6,lw()*2);
+  if(r.w<min&&r.h<min)return;
+  if(ed.tool==='crop'){
+    if(r.w<min||r.h<min)return;
+    const x=Math.max(0,Math.round(r.x)),y=Math.max(0,Math.round(r.y));
+    const w=Math.min(vCv.width-x,Math.round(r.w)),h=Math.min(vCv.height-y,Math.round(r.h));
+    snap();const c=ed.hist[ed.hist.length-1];setSize(w,h);vctx.drawImage(c,x,y,w,h,0,0,w,h);fitCanvas();return;
+  }
+  snap();stroke(vctx,ed.color,lw());
+  if(ed.tool==='arrow')drawArrow(vctx,a,b);else vctx.strokeRect(r.x,r.y,r.w,r.h);
+}
+vWrap.addEventListener('pointerup',finishDrag);
+vWrap.addEventListener('pointercancel',finishDrag);
+function editedName(){const n=(vList[vIdx].name||'图片').replace(/\.[^.]+$/,'');return (/_标注$/.test(n)?n:n+'_标注')+'.png'}
+function canvasFile(){return new Promise(r=>vCv.toBlob(b=>r(b&&new File([b],editedName(),{type:'image/png'})),'image/png'))}
+document.getElementById('vSave').onclick=async()=>{
+  const f=await canvasFile();if(!f)return;
+  const a=document.createElement('a');a.href=URL.createObjectURL(f);a.download=f.name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),5000);
+};
+document.getElementById('vDone').onclick=async()=>{
+  const f=await canvasFile();if(!f){alert('导出失败');return}
+  const it=vList[vIdx];
+  if(it.pend!=null&&pend[it.pend]&&pend[it.pend].url===it.url){pend.splice(it.pend,1);drawPend()}   // 改的是还没发的附件：换掉原图
+  endEdit();vw.classList.remove('on');vImg.removeAttribute('src');
+  await upload(f);ta.focus();
+};
+// ===== 几场会议：切换、列表、谁在跑、哪场在等你 =====
+const roomList=document.getElementById('roomList');
+let ROOMS=[];
+function seenMap(){try{return JSON.parse(localStorage.getItem('rt_seen')||'{}')}catch(e){return {}}}
+function markSeen(rid,n){try{const m=seenMap();if(m[rid]!==n){m[rid]=n;localStorage.setItem('rt_seen',JSON.stringify(m))}}catch(e){}}
+// 一场会议的状态牌：在跑 > 有话对你说（AI @用户 了你还没看）> 有新消息
+function roomBadge(m){
+  if((m.running||[]).some(x=>!x.startsWith('compact:')))return ['run',(m.running.filter(x=>!x.startsWith('compact:')).join('、'))+' 在想'];
+  if(m.id===RID)return null;
+  const seen=seenMap()[m.id];
+  if(seen==null)return null;   // 这台浏览器没看过的老会议：不标
+  if(m.last_to_user>=seen)return ['you','等你'];
+  if(m.count>seen)return ['','新 '+(m.count-seen)];
+  return null;
+}
+function drawRooms(){
+  const live=ROOMS.filter(m=>!m.archived||m.id===RID);
+  const html=live.map(m=>{
+    const b=roomBadge(m),dot=b?(b[0]==='run'?'run':b[0]==='you'?'you':'new'):'';
+    return '<li class="'+(m.id===RID?'cur':'')+(m.archived?' arch':'')+'"><a href="?r='+encodeURIComponent(m.id)+'" data-id="'+esc(m.id)+'" title="'+esc(m.title+' · '+m.workdir)+'"><span class="dot '+dot+'"></span><span class="t">'+esc(m.title)+'</span>'+(b?'<span class="b '+b[0]+'">'+esc(b[1])+'</span>':'')+'</a></li>';
+  }).join('')||'<li class="hint" style="padding:6px 8px;color:var(--mut)">还没有会议</li>';
+  if(roomList.innerHTML!==html)roomList.innerHTML=html;
+  const wait=ROOMS.filter(m=>m.id!==RID&&!m.archived&&(roomBadge(m)||[])[0]==='you').length;
+  const lb=document.getElementById('bList');lb.textContent='会议列表'+(wait?' · '+wait+' 等你':'');
+  document.getElementById('menu').classList.toggle('attn',wait>0);
+  const base=S&&S.title?S.title+' · 会议室':'会议室';
+  document.title=(wait?'('+wait+') ':'')+base;
+}
+roomList.addEventListener('click',e=>{
+  const a=e.target.closest('a[data-id]');if(!a)return;
+  if(e.ctrlKey||e.metaKey||e.shiftKey||e.button)return;   // Ctrl 点 / 中键：新标签页里开
+  e.preventDefault();switchRoom(a.dataset.id);
+});
+async function pollRooms(){
+  try{
+    const j=await (await fetch('/api/rooms',{cache:'no-store'})).json();ROOMS=j.rooms||[];
+    // 第一次见到的会议：把现在的消息数记成"看过了"，之后新来的才标（不然刚装好的手机上永远不提醒）
+    const m=seenMap();let ch=false;
+    ROOMS.forEach(r=>{if(m[r.id]==null){m[r.id]=r.count;ch=true}});
+    if(ch)try{localStorage.setItem('rt_seen',JSON.stringify(m))}catch(e){}
+    drawRooms();return j;
+  }catch(e){return null}
+}
+function resetRoomView(){
+  since=0;curMeeting=undefined;S=null;feed.innerHTML='';
+  for(const k in msgById)delete msgById[k];
+  pend=[];drawPend();setQuote(null);lastRun={running:[],queued:0};
+  annVal='';showAnn();boardSig='';closeEdit();
+  if(typeof closeToc==='function')closeToc();
+  if(vw.classList.contains('on')){endEdit();vw.classList.remove('on')}
+  document.getElementById('stops').dataset.k='';
+}
+function switchRoom(id,replace){
+  if(!id)return;
+  if(id!==RID){RID=id;resetRoomView()}
+  const u='?r='+encodeURIComponent(id);
+  if(location.search!==u)(replace?history.replaceState:history.pushState).call(history,{r:id},'',u);
+  post(api('open'),{});
+  drawRooms();
+  poll().then(()=>{feed.scrollTop=feed.scrollHeight;queueJump()});
+}
+addEventListener('popstate',()=>{const id=new URLSearchParams(location.search).get('r');if(id&&id!==RID){RID=id;resetRoomView();drawRooms();poll().then(()=>{feed.scrollTop=feed.scrollHeight})}});
+let goneShown=false;
+function roomGone(){
+  if(goneShown)return;goneShown=true;
+  showModal('<h3>这场会议不在了</h3><div class="hint">它被删了（移进了回收站），或者会议号不对。</div><div class="btns"><button type="button" id="gList" class="pri">去会议列表</button></div>');
+  document.getElementById('gList').onclick=()=>{goneShown=false;hideModal();RID=null;resetRoomView();pickRoom()};
+}
+async function pickRoom(){
+  const j=await pollRooms();
+  const rooms=(j&&j.rooms)||[];
+  const id=(j&&j.last&&rooms.some(m=>m.id===j.last)&&j.last)||((rooms.find(m=>!m.archived)||rooms[0]||{}).id);
+  if(id)switchRoom(id,true);
+  else if(!modal.classList.contains('show'))openNew(true);
+}
+document.getElementById('rNew').onclick=()=>openNew(false);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&RID&&since)markSeen(RID,since)});
+
+// ===== 正在改的文件（文件护栏）=====
+const claimList=document.getElementById('claimList');
+let claimSig='';
+function drawClaims(){
+  const cs=(S&&S.claims)||[];
+  document.getElementById('claims').classList.toggle('on',true);
+  const sig=JSON.stringify(cs);if(sig===claimSig)return;claimSig=sig;
+  claimList.innerHTML=cs.length?cs.map(c=>{
+    const nm=c.shown.replace(/[\\/]+$/,'').split(/[\\/]/).pop()||c.shown;
+    const how=c.kind==='auto'?'这一轮在改':'占着'+(c.mins_left!=null?'，还剩约 '+c.mins_left+' 分钟':'')+(c.reason?'：'+c.reason:'');
+    return '<li class="ai-'+esc(c.ai)+'"><span class="cf"><b>'+esc(nm)+(c.dir?'/':'')+'</b> · '+esc(c.who)+'<small>'+esc(how)+' · '+esc(c.shown)+'</small></span><button type="button" data-key="'+esc(c.key)+'" title="强行放开（AI 下次改它就不会被挡）">放开</button></li>';
+  }).join(''):'<li style="color:var(--faint)">（没人占着文件。AI 改文件时会自动占住，说完就放开）</li>';
+}
+claimList.onclick=async e=>{
+  const b=e.target.closest('button[data-key]');if(!b)return;
+  if(!confirm('强行放开这个文件？\n\n占着它的 AI 可能还在改；放开后别的 AI 就能同时改它了。'))return;
+  const [ok,j]=await post('/api/claims/release',{key:b.dataset.key});if(!ok)alert(j.error||'失败');await loadState();
+};
+document.getElementById('cMine').onclick=async()=>{
+  const t=prompt('你自己在手动改哪些文件？占住后 AI 改它们会被挡下。\n填完整路径，几个用换行或分号隔开：');
+  if(!t||!t.trim())return;
+  const mins=prompt('占多久（分钟，最多 240）？','60');if(mins===null)return;
+  const [ok,j]=await post('/api/claims/mine',{paths:t.split(/[;\n]+/).map(x=>x.trim()).filter(Boolean),minutes:+mins||60});
+  if(!ok){alert(j.error||'失败');return}
+  if(j.blocked&&j.blocked.length)alert('这些现在被 AI 占着，没占上：\n'+j.blocked.map(x=>x.path+'（'+x.by+'）').join('\n'));
+  await loadState();
+};
+
+// ===== 工具：这场会议里 MCP / 插件 / 技能开哪些 =====
+async function loadTools(a,x){
+  const box=document.getElementById('toolsBox');if(!box)return;
+  let t;
+  try{const r=await fetch(api('tools')+'?ai='+a,{cache:'no-store'});t=await r.json();if(!r.ok)throw 0}catch(e){box.innerHTML='<div class="hint">读不到工具清单</div>';return}
+  const li=(id,on,name,sub,tags,locked)=>'<li class="'+(locked?'lk':'')+'"><input type="checkbox" data-id="'+esc(id)+'"'+(on?' checked':'')+(locked?' disabled':'')+'><span class="tn">'+esc(name)+(tags||[]).map(g=>'<span class="tg">'+esc(g)+'</span>').join('')+(sub?'<small>'+esc(sub)+'</small>':'')+'</span></li>';
+  const empty='<li class="empty">（没有）</li>';
+  const pName=id=>id.replace(/@.*$/,'');
+  box.innerHTML=
+    '<div class="hint">只管这场会议的 '+a+'。会议室自己的 bridge（看目标、占文件、中途发进度）一直接着。</div>'+
+    '<h4>MCP 服务（只在干活模式加载）</h4><ul class="tl" id="tMcp">'+(t.mcp.map(m=>li(m.name,m.on,m.name,m.source)).join('')||empty)+'</ul>'+
+    '<h4>插件</h4><ul class="tl" id="tPlug">'+(t.plugins.map(p=>li(p.id,p.on,p.label||pName(p.id),p.label?'':p.id,[p.hooks?'带钩子':'',p.synced?'claude.ai 同步':'',p.global?'':'平时关着'].filter(Boolean))).join('')||empty)+'</ul>'+
+    '<h4>技能</h4><ul class="tl" id="tSkill">'+(t.skills.map(k=>li(k.name,k.on,k.name,(k.locked?'插件带的，跟着插件开关 · ':k.source+' · ')+(k.desc||''),[],k.locked)).join('')||empty)+'</ul>'+
+    '<div class="btns"><button type="button" id="tSave"'+(x.busy?' disabled':'')+'>保存工具设置</button></div>'+
+    '<div class="hint">'+(x.busy?'它正在跑或排着队，说完才能改。':'带钩子的插件（比如 superpowers 开场会往会话里塞一大段说明）、从 claude.ai 同步来的插件，会议室里默认关。改了下一轮生效'+(a==='codex'?'（codex 的后台会重起一次）':'')+'。')+'</div>';
+  const defOn=p=>(p.hooks||p.synced)?false:p.global;
+  document.getElementById('tSave').onclick=async()=>{
+    const val=sel=>[...box.querySelectorAll(sel+' input[data-id]')];
+    const mcp=val('#tMcp').filter(i=>i.checked).map(i=>i.dataset.id);
+    const plugins={};
+    val('#tPlug').forEach(i=>{const p=t.plugins.find(q=>q.id===i.dataset.id);if(!p)return;if(i.checked!==defOn(p)||p.set)plugins[p.id]=i.checked});
+    const skills_off=val('#tSkill').filter(i=>!i.disabled&&!i.checked).map(i=>i.dataset.id);
+    const [ok,j]=await post(api('tools'),{ai:a,tools:{mcp,plugins,skills_off}});
+    if(!ok){alert(j.error||'失败');return}
+    await loadState();openAi(a);
+  };
+}
+
+setInterval(()=>{if(RID)poll()},1500);
+setInterval(pollRooms,3000);
+if(RID)switchRoom(RID,true);else pickRoom();
 </script>
 </body>
 </html>

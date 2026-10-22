@@ -1,26 +1,33 @@
 import os, sys, tempfile, time, unittest, json, threading
 os.environ["ROUNDTABLE_LOG_DIR"] = tempfile.mkdtemp(prefix="rt_pp_")
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-import roundtable as rt
+from bridge import room as R, agents, common, web, workspace as ws
+ROOM = None   # 这个测试文件当前在用的会议
+
+
+def new_room(title, ann="", wd=None):
+    global ROOM
+    ROOM = R.rooms.create(title, ann, wd)
+    return ROOM.id
 
 FAKE_HOME = tempfile.mkdtemp(prefix="rt_home_")
-rt.CLAUDE_HOME = FAKE_HOME          # 绝不碰真的 ~/.claude
+agents.CLAUDE_HOME = FAKE_HOME          # 绝不碰真的 ~/.claude
 codex_deleted = []
-rt.delete_codex_thread = lambda sid: (codex_deleted.append(sid) or (True, ""))   # 不碰真的 codex
+agents.delete_codex_thread = lambda sid: (codex_deleted.append(sid) or (True, ""))   # 不碰真的 codex
 calls = []
 
 
-def fake(ai, prompt, sid, imgs, mode=None):
+def fake(ai, prompt, sid, imgs, mode=None, room=None):
     calls.append((ai, prompt))
     return True, "@用户 好了", sid or ("sid-%s-%d" % (ai, time.time_ns())), []
 
 
-rt.ai_caller = fake
+R.ai_caller = fake
 
 
 def wait_idle():
     for _ in range(200):
-        if not rt.busy_for():
+        if not ROOM.busy_for():
             return
         time.sleep(0.05)
 
@@ -39,7 +46,7 @@ def make_claude_files(sid):
 
 def wait_note(word):
     for _ in range(100):
-        if any(word in m["text"] for m in rt.messages):
+        if any(word in m["text"] for m in ROOM.messages):
             return True
         time.sleep(0.05)
     return False
@@ -47,19 +54,19 @@ def wait_note(word):
 
 class T(unittest.TestCase):
     def test_purge_deletes_sessions(self):
-        a = rt.new_meeting("要删的")
-        rt.handle_message("你", "两个都说话")
+        a = new_room("要删的")
+        ROOM.handle_message("你", "两个都说话")
         wait_idle()
-        csid, xsid = rt.meta["claude_session"], rt.meta["codex_session"]
-        rt.meta["old_sessions"]["claude"].append("old-claude-0001")
-        rt.save_meta()
+        csid, xsid = ROOM.meta["claude_session"], ROOM.meta["codex_session"]
+        ROOM.meta["old_sessions"]["claude"].append("old-claude-0001")
+        ROOM.save_meta()
         proj, keep = make_claude_files(csid)
         make_claude_files("old-claude-0001")
-        rt.new_meeting("留着的")
-        ok, err = rt.trash_meeting(a)
+        new_room("留着的")
+        ok, err = R.trash_meeting(a)
         self.assertTrue(ok, err)
         self.assertTrue(os.path.exists(os.path.join(proj, csid + ".jsonl")), "进回收站时不删")
-        ok, err = rt.purge_all()
+        ok, err = R.purge_all()
         self.assertTrue(ok, err)
         self.assertTrue(wait_note("彻底删除"))
         self.assertFalse(os.path.exists(os.path.join(proj, csid + ".jsonl")))
@@ -71,39 +78,39 @@ class T(unittest.TestCase):
         self.assertIn(xsid, codex_deleted)
 
     def test_shared_session_kept(self):
-        a = rt.new_meeting("共用甲")
-        rt.handle_message("你", "@claude 在吗")
+        a = new_room("共用甲")
+        ROOM.handle_message("你", "@claude 在吗")
         wait_idle()
-        sid = rt.meta["claude_session"]
+        sid = ROOM.meta["claude_session"]
         proj, _ = make_claude_files(sid)
-        b = rt.new_meeting("共用乙")
-        rt.meta["claude_session"] = sid    # 两场会议指向同一个会话（比如复制出来的）
-        rt.save_meta()
-        rt.new_meeting("第三场")
-        rt.trash_meeting(a)
-        rt.purge_all()
+        b = new_room("共用乙")
+        ROOM.meta["claude_session"] = sid    # 两场会议指向同一个会话（比如复制出来的）
+        ROOM.save_meta()
+        new_room("第三场")
+        R.trash_meeting(a)
+        R.purge_all()
         time.sleep(0.5)
         self.assertTrue(os.path.exists(os.path.join(proj, sid + ".jsonl")), "别的会议还在用，不删")
 
     def test_bad_sid_ignored(self):
-        self.assertEqual(rt.delete_claude_session("../../x"), 0)
-        self.assertEqual(rt.delete_claude_session("*"), 0)
-        self.assertEqual(rt.meeting_sessions({"claude_session": "..\\..", "codex_session": "abc-def-123"}),
+        self.assertEqual(agents.delete_claude_session("../../x"), 0)
+        self.assertEqual(agents.delete_claude_session("*"), 0)
+        self.assertEqual(R.meeting_sessions({"claude_session": "..\\..", "codex_session": "abc-def-123"}),
                          {"claude": [], "codex": ["abc-def-123"]})
 
     def test_partial_quote(self):
-        rt.new_meeting("引用一段")
-        rt.handle_message("你", "@claude 说点长的")
+        new_room("引用一段")
+        ROOM.handle_message("你", "@claude 说点长的")
         wait_idle()
-        cm = [m for m in rt.messages if m["speaker"] == "claude"][-1]
+        cm = [m for m in ROOM.messages if m["speaker"] == "claude"][-1]
         calls.clear()
-        rt.handle_message("你", "这个对吗", reply_to=rt.make_reply(cm["id"], "  好\n了  "))
+        ROOM.handle_message("你", "这个对吗", reply_to=ROOM.make_reply(cm["id"], "  好\n了  "))
         wait_idle()
         self.assertEqual([c[0] for c in calls], ["claude"])
         self.assertIn("（回复 [claude] 那条里的这段：“好 了”）这个对吗", calls[0][1])
-        r = rt.make_reply(cm["id"], "x" * 300)
+        r = ROOM.make_reply(cm["id"], "x" * 300)
         self.assertTrue(r["part"])
-        self.assertEqual(len(r["text"]), rt.QUOTE_LEN + 1)
+        self.assertEqual(len(r["text"]), R.QUOTE_LEN + 1)
 
 
 if __name__ == "__main__":
